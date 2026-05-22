@@ -1,9 +1,12 @@
 import { Box, Text, createCliRenderer } from "@opentui/core";
 import { mapInputToAction, type WatchtowerAction } from "../input/actions";
+import { runSetupPreflight, type SetupFailure, type SetupPreflightResult } from "../setup/preflight";
+import { formatPreflightFailureLines } from "../setup/preflightScreen";
 
 export type WatchtowerScreen = "triage" | "run";
 
 export type WatchtowerShellState = {
+  preflight: SetupPreflightResult;
   screen: WatchtowerScreen;
   status: string;
 };
@@ -15,15 +18,25 @@ const SCREEN_LABELS: Record<WatchtowerScreen, string> = {
   run: "Run",
 };
 
+const ACTIONS_ALLOWED_DURING_FAILED_PREFLIGHT: ReadonlySet<WatchtowerAction> = new Set([
+  "exit",
+  "refresh",
+  "retryPreflight",
+]);
+
 export function reduceShellState(
   state: WatchtowerShellState,
   action: WatchtowerAction,
 ): WatchtowerShellState {
+  if (isBlockedByPreflight(state, action)) {
+    return state;
+  }
+
   switch (action) {
     case "switchToTriage":
-      return { screen: "triage", status: "Triage screen selected" };
+      return { ...state, screen: "triage", status: "Triage screen selected" };
     case "switchToRun":
-      return { screen: "run", status: "Run screen selected" };
+      return { ...state, screen: "run", status: "Run screen selected" };
     case "refresh":
       return { ...state, status: "Refresh placeholder" };
     case "focusSearch":
@@ -37,7 +50,7 @@ export function reduceShellState(
     case "openSelectedIssue":
       return { ...state, status: "Open issue placeholder" };
     case "retryPreflight":
-      return { ...state, status: "Retry preflight placeholder" };
+      return { ...state, status: "Retrying setup preflight" };
     case "clearSearch":
       return { ...state, status: "Search cleared" };
     case "cancel":
@@ -55,6 +68,10 @@ export function reduceShellState(
 }
 
 export function createWatchtowerShellView(state: WatchtowerShellState) {
+  if (!state.preflight.ok) {
+    return createPreflightFailureView(state.preflight.failures);
+  }
+
   return Box(
     {
       borderStyle: "rounded",
@@ -72,6 +89,47 @@ export function createWatchtowerShellView(state: WatchtowerShellState) {
   );
 }
 
+function createPreflightFailureView(failures: SetupFailure[]) {
+  const lines = formatPreflightFailureLines(failures);
+  return Box(
+    {
+      borderStyle: "rounded",
+      flexDirection: "column",
+      gap: 1,
+      height: "100%",
+      id: WATCHTOWER_SHELL_ID,
+      padding: 1,
+      width: "100%",
+    },
+    ...lines.map((line, index) =>
+      Text({
+        content: line,
+        fg: getPreflightLineColor(index, lines.length),
+      }),
+    ),
+  );
+}
+
+function isBlockedByPreflight(state: WatchtowerShellState, action: WatchtowerAction): boolean {
+  return !state.preflight.ok && !ACTIONS_ALLOWED_DURING_FAILED_PREFLIGHT.has(action);
+}
+
+function isPreflightRetryAction(action: WatchtowerAction): boolean {
+  return action === "retryPreflight" || action === "refresh";
+}
+
+function getPreflightLineColor(index: number, lineCount: number): string | undefined {
+  if (index === 0) {
+    return "#F38BA8";
+  }
+
+  if (index === lineCount - 1) {
+    return "#F9E2AF";
+  }
+
+  return undefined;
+}
+
 export async function runWatchtowerCli(): Promise<void> {
   const renderer = await createCliRenderer({
     exitOnCtrlC: false,
@@ -79,6 +137,7 @@ export async function runWatchtowerCli(): Promise<void> {
   });
 
   let state: WatchtowerShellState = {
+    preflight: await runSetupPreflight(),
     screen: "triage",
     status: "CLI shell ready",
   };
@@ -93,6 +152,23 @@ export async function runWatchtowerCli(): Promise<void> {
     hasRenderedShell = true;
   };
 
+  const retrySetupPreflight = () => {
+    state = {
+      ...state,
+      status: "Retrying setup preflight",
+    };
+    render();
+
+    void runSetupPreflight().then((preflight) => {
+      state = {
+        ...state,
+        preflight,
+        status: "Setup preflight retried",
+      };
+      render();
+    });
+  };
+
   renderer.addInputHandler((inputSequence) => {
     const action = mapInputToAction({ type: "terminal", sequence: inputSequence });
     if (action === undefined) {
@@ -101,6 +177,11 @@ export async function runWatchtowerCli(): Promise<void> {
 
     if (action === "exit") {
       renderer.destroy();
+      return true;
+    }
+
+    if (isPreflightRetryAction(action) && !state.preflight.ok) {
+      retrySetupPreflight();
       return true;
     }
 
