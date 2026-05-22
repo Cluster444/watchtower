@@ -60,6 +60,24 @@ describe("GhIssueGateway", () => {
     await expect(gateway.getRepositoryUrl()).resolves.toBe("https://github.com/Cluster444/watchtower");
     expect(calls).toEqual([["gh", "repo", "view", "--json", "url", "--jq", ".url"]]);
   });
+
+  test("mutates labels and closes issues without comments or other fields", async () => {
+    const calls: string[][] = [];
+    const gateway = new GhIssueGateway({
+      cwd: "/repo",
+      process: fakeProcess(calls),
+    });
+
+    await gateway.removeLabel(6, "needs-info");
+    await gateway.addLabel(6, "ready-for-agent");
+    await gateway.closeIssue(6);
+
+    expect(calls).toEqual([
+      ["gh", "issue", "edit", "6", "--remove-label", "needs-info"],
+      ["gh", "issue", "edit", "6", "--add-label", "ready-for-agent"],
+      ["gh", "issue", "close", "6"],
+    ]);
+  });
 });
 
 function expectedIssueSearchCall(state: "open" | "closed", labelQualifier: string): string[] {

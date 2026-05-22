@@ -1,4 +1,11 @@
 import type { IssueBoard, IssueCard, IssueLane } from "./issueBoard";
+import type { LabelVocabulary } from "../setup/labelVocabulary";
+import {
+  executeMutationPlan,
+  planTriageMove,
+  type IssueMutationGateway,
+  type TriageMoveDestination,
+} from "./triageActions";
 
 export type BoardScreen = "triage" | "run";
 export type TriageLaneKey =
@@ -130,6 +137,47 @@ export async function refreshBoardState(state: BoardState, loadBoard: BoardDataL
       status: `Failed to load GitHub issues: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
+}
+
+export async function moveSelectedIssueToTriageDestination(
+  state: BoardState,
+  destination: TriageMoveDestination,
+  vocabulary: LabelVocabulary,
+  gateway: IssueMutationGateway,
+  loadBoard: BoardDataLoader,
+): Promise<BoardState> {
+  const card = getSelectedCard(state);
+  if (card === undefined || state.selection.screen !== "triage") {
+    return { ...state, status: "No triage issue is selected." };
+  }
+
+  let refreshedBoard: IssueBoard | undefined;
+  const gatewayWithBoardRefresh: IssueMutationGateway = {
+    ...gateway,
+    async refresh() {
+      await gateway.refresh();
+      refreshedBoard = await loadBoard();
+    },
+  };
+
+  const result = await executeMutationPlan(
+    planTriageMove({ card, destination, vocabulary }),
+    gatewayWithBoardRefresh,
+  );
+  const nextState = refreshedBoard === undefined ? state : applyRefreshedBoard(state, refreshedBoard);
+
+  return {
+    ...nextState,
+    status: result.message,
+  };
+}
+
+function applyRefreshedBoard(state: BoardState, board: IssueBoard): BoardState {
+  return normalizeSelection({
+    ...state,
+    board,
+    visibleBoard: filterIssueBoard(board, state.searchQuery),
+  });
 }
 
 export function getSelectedIssueUrl(state: BoardState): string | undefined {

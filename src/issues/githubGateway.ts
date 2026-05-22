@@ -41,6 +41,18 @@ export class GhIssueGateway {
     return result.stdout.trim() || undefined;
   }
 
+  async addLabel(issueNumber: number, label: string): Promise<void> {
+    await this.runIssueMutation(["issue", "edit", String(issueNumber), "--add-label", label], "add label");
+  }
+
+  async removeLabel(issueNumber: number, label: string): Promise<void> {
+    await this.runIssueMutation(["issue", "edit", String(issueNumber), "--remove-label", label], "remove label");
+  }
+
+  async closeIssue(issueNumber: number): Promise<void> {
+    await this.runIssueMutation(["issue", "close", String(issueNumber)], "close issue");
+  }
+
   private async searchIssues(state: "open" | "closed", qualifiers: string[]): Promise<GitHubIssue[]> {
     const result = await this.process.run("gh", createIssueSearchArgs(state, qualifiers), {
       cwd: this.cwd,
@@ -50,6 +62,15 @@ export class GhIssueGateway {
     }
 
     return parseGhIssues(result.stdout);
+  }
+
+  private async runIssueMutation(args: string[], action: string): Promise<void> {
+    const result = await this.process.run("gh", args, {
+      cwd: this.cwd,
+    });
+    if (result.exitCode !== 0) {
+      throw new Error(`gh ${action} failed: ${result.stderr || result.stdout}`.trim());
+    }
   }
 }
 

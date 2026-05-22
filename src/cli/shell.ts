@@ -5,6 +5,7 @@ import { mapInputToAction, type WatchtowerAction } from "../input/actions";
 import {
   createBoardState,
   getSelectedIssueUrl,
+  moveSelectedIssueToTriageDestination,
   reduceBoardState,
   refreshBoardState,
   type BoardState,
@@ -13,7 +14,8 @@ import {
 import { GhIssueGateway } from "../issues/githubGateway";
 import { openIssueInBrowser } from "../issues/openIssue";
 import { classifyIssueBoard, renderIssueBoardLines, type IssueBoard } from "../issues/issueBoard";
-import { parseLabelVocabulary } from "../setup/labelVocabulary";
+import type { IssueMutationGateway, TriageMoveDestination } from "../issues/triageActions";
+import { parseLabelVocabulary, type LabelVocabulary } from "../setup/labelVocabulary";
 import { runSetupPreflight, type SetupFailure, type SetupPreflightResult } from "../setup/preflight";
 import { formatPreflightFailureLines } from "../setup/preflightScreen";
 
@@ -22,6 +24,8 @@ export type WatchtowerScreen = "triage" | "run";
 export type WatchtowerShellState = {
   board?: IssueBoard;
   boardState?: BoardState;
+  labelVocabulary?: LabelVocabulary;
+  moveMenuOpen: boolean;
   preflight: SetupPreflightResult;
   screen: WatchtowerScreen;
   status: string;
@@ -39,6 +43,15 @@ const ACTIONS_ALLOWED_DURING_FAILED_PREFLIGHT: ReadonlySet<WatchtowerAction> = n
   "refresh",
   "retryPreflight",
 ]);
+const MOVE_MENU_OPTIONS = [
+  "0 Inbox",
+  "1 needs-triage",
+  "2 needs-info",
+  "3 ready-for-agent",
+  "4 ready-for-human",
+  "5 wontfix",
+  "Esc cancel",
+].join(" | ");
 
 export function reduceShellState(
   state: WatchtowerShellState,
@@ -72,7 +85,9 @@ export function reduceShellState(
     case "focusSearch":
       return applyBoardAction(state, { type: "focusSearch" }, { status: "Search focused" });
     case "openMoveMenu":
-      return { ...state, status: "Move menu placeholder" };
+      return state.boardState === undefined
+        ? { ...state, status: "No issue is selected." }
+        : { ...state, moveMenuOpen: true, status: "Move menu opened" };
     case "markReadyToRun":
       return { ...state, status: "Mark ready placeholder" };
     case "unmarkReadyToRun":
@@ -84,7 +99,7 @@ export function reduceShellState(
     case "clearSearch":
       return applyBoardAction(state, { type: "clearSearch" }, { status: "Search cleared" });
     case "cancel":
-      return { ...state, status: "Canceled" };
+      return { ...state, moveMenuOpen: false, status: "Canceled" };
     case "confirmDestructiveAction":
       return { ...state, status: "Confirmed placeholder" };
     case "moveSelectionUp":
@@ -141,6 +156,7 @@ export function createWatchtowerShellView(state: WatchtowerShellState) {
     Text({ content: `Screen: ${SCREEN_LABELS[state.screen]}` }),
     Text({ content: state.status, fg: "#F9E2AF" }),
     ...renderBoardText(state),
+    ...renderMoveMenuText(state),
     Text({ content: "1/t triage | 2/r run | / search | Ctrl+R refresh | q exit" }),
   );
 }
@@ -194,6 +210,7 @@ export async function runWatchtowerCli(): Promise<void> {
 
   let state: WatchtowerShellState = {
     preflight: await runSetupPreflight(),
+    moveMenuOpen: false,
     screen: "triage",
     status: "CLI shell ready",
   };
@@ -233,15 +250,16 @@ export async function runWatchtowerCli(): Promise<void> {
     state = { ...state, status: "Loading GitHub issues" };
     render();
 
-    const loadBoard = () => loadIssueBoard(process.cwd());
+    const loadBoard = () => loadIssueBoard(process.cwd()).then((data) => data.board);
     const refresh =
       state.boardState === undefined
-        ? loadBoard().then(async (board) =>
-            createBoardState(board, {
+        ? loadIssueBoard(process.cwd()).then(async (data) => {
+            state = { ...state, labelVocabulary: data.vocabulary };
+            return createBoardState(data.board, {
               repositoryUrl: await getRepositoryUrl(process.cwd()),
               screen: state.screen,
-            }),
-          )
+            });
+          })
         : refreshBoardState(state.boardState, loadBoard);
 
     void refresh
@@ -259,6 +277,10 @@ export async function runWatchtowerCli(): Promise<void> {
   };
 
   renderer.addInputHandler((inputSequence) => {
+    if (state.moveMenuOpen && handleMoveMenuInput(inputSequence)) {
+      return true;
+    }
+
     const action = mapInputToAction({ type: "terminal", sequence: inputSequence });
     if (action === undefined && state.boardState?.searchFocused === true && isSearchTextInput(inputSequence)) {
       state = syncShellWithBoardState(
@@ -314,11 +336,56 @@ export async function runWatchtowerCli(): Promise<void> {
     render();
   }
 
+  function handleMoveMenuInput(inputSequence: string): boolean {
+    const destination = MOVE_MENU_DESTINATIONS.get(inputSequence);
+    if (destination === undefined) {
+      if (inputSequence === "\x1b") {
+        state = { ...state, moveMenuOpen: false, status: "Canceled" };
+        render();
+        return true;
+      }
+      return false;
+    }
+
+    void moveSelectedIssue(destination);
+    return true;
+  }
+
+  async function moveSelectedIssue(destination: TriageMoveDestination): Promise<void> {
+    if (state.boardState === undefined || state.labelVocabulary === undefined) {
+      state = { ...state, moveMenuOpen: false, status: "No issue is selected." };
+      render();
+      return;
+    }
+
+    const boardState = state.boardState;
+    const labelVocabulary = state.labelVocabulary;
+    state = { ...state, moveMenuOpen: false, status: "Moving selected issue" };
+    render();
+
+    const gateway = new GhIssueGateway({ cwd: process.cwd() });
+    const loadBoard = () => loadIssueBoard(process.cwd()).then((data) => {
+      state = { ...state, labelVocabulary: data.vocabulary };
+      return data.board;
+    });
+    state = syncShellWithBoardState(
+      state,
+      await moveSelectedIssueToTriageDestination(
+        boardState,
+        destination,
+        labelVocabulary,
+        createIssueMutationGateway(gateway),
+        loadBoard,
+      ),
+    );
+    render();
+  }
+
   render();
   refreshIssueBoard();
 }
 
-export async function loadIssueBoard(cwd: string): Promise<IssueBoard> {
+export async function loadIssueBoard(cwd: string): Promise<{ board: IssueBoard; vocabulary: LabelVocabulary }> {
   const labelDoc = await readFile(join(cwd, "docs", "agents", "triage-labels.md"), "utf8");
   const vocabulary = parseLabelVocabulary(labelDoc);
   if ("error" in vocabulary) {
@@ -327,7 +394,7 @@ export async function loadIssueBoard(cwd: string): Promise<IssueBoard> {
 
   const gateway = new GhIssueGateway({ cwd });
   const issueSets = await gateway.loadIssueSets();
-  return classifyIssueBoard(issueSets, vocabulary);
+  return { board: classifyIssueBoard(issueSets, vocabulary), vocabulary };
 }
 
 function renderBoardText(state: WatchtowerShellState) {
@@ -351,6 +418,17 @@ function renderBoardText(state: WatchtowerShellState) {
         fg: line.startsWith("#") ? "#CDD6F4" : "#A6ADC8",
       }),
     ),
+  ];
+}
+
+function renderMoveMenuText(state: WatchtowerShellState) {
+  if (!state.moveMenuOpen) {
+    return [];
+  }
+
+  return [
+    Text({ content: "Move selected issue:" }),
+    Text({ content: MOVE_MENU_OPTIONS }),
   ];
 }
 
@@ -382,3 +460,21 @@ async function getRepositoryUrl(cwd: string): Promise<string | undefined> {
 function isSearchTextInput(inputSequence: string): boolean {
   return inputSequence.length === 1 && inputSequence >= " " && inputSequence !== "\x7f";
 }
+
+function createIssueMutationGateway(gateway: GhIssueGateway): IssueMutationGateway {
+  return {
+    addLabel: (issueNumber, label) => gateway.addLabel(issueNumber, label),
+    closeIssue: (issueNumber) => gateway.closeIssue(issueNumber),
+    refresh: async () => {},
+    removeLabel: (issueNumber, label) => gateway.removeLabel(issueNumber, label),
+  };
+}
+
+const MOVE_MENU_DESTINATIONS: ReadonlyMap<string, TriageMoveDestination> = new Map([
+  ["0", "inbox"],
+  ["1", "needs-triage"],
+  ["2", "needs-info"],
+  ["3", "ready-for-agent"],
+  ["4", "ready-for-human"],
+  ["5", "wontfix"],
+]);

@@ -2,11 +2,14 @@ import { describe, expect, test } from "bun:test";
 import {
   createBoardState,
   getSelectedIssueUrl,
+  moveSelectedIssueToTriageDestination,
   reduceBoardState,
   refreshBoardState,
   type BoardDataLoader,
 } from "./boardState";
 import type { IssueBoard } from "./issueBoard";
+import type { IssueMutationGateway } from "./triageActions";
+import type { LabelVocabulary } from "../setup/labelVocabulary";
 
 describe("boardState", () => {
   test("filters loaded cards by number, title, workflow labels, and body preview", () => {
@@ -57,7 +60,54 @@ describe("boardState", () => {
 
     expect(getSelectedIssueUrl(state)).toBe("https://github.com/Cluster444/watchtower/issues/101");
   });
+
+  test("moves the selected issue through triage labels and resolves to refreshed GitHub state", async () => {
+    const calls: string[] = [];
+    const gateway = fakeMutationGateway(calls);
+
+    const state = await moveSelectedIssueToTriageDestination(
+      createBoardState(board()),
+      "ready-for-agent",
+      vocabulary,
+      gateway,
+      async () => board({ firstInboxTitle: "Refreshed from GitHub" }),
+    );
+
+    expect(calls).toEqual(["add:101:ready-for-agent", "refresh"]);
+    expect(state.status).toBe("Move #101 to ready-for-agent complete. Refreshed from GitHub.");
+    expect(state.board.triage.inbox.cards[0]?.title).toBe("Refreshed from GitHub");
+  });
+
+  test("reports failed mutation steps and still resolves pending state with refresh", async () => {
+    const calls: string[] = [];
+    const gateway = fakeMutationGateway(calls, { failAddLabel: true });
+    let state = createBoardState(board());
+    state = reduceBoardState(state, { type: "moveSelectionRight" });
+
+    const result = await moveSelectedIssueToTriageDestination(
+      state,
+      "needs-info",
+      vocabulary,
+      gateway,
+      async () => board({ firstInboxTitle: "Refreshed after failure" }),
+    );
+
+    expect(calls).toEqual(["remove:303:ready-for-agent", "add:303:needs-info", "refresh"]);
+    expect(result.status).toContain("Failed to add label needs-info to #303");
+    expect(result.status).toContain("Earlier mutation steps may have succeeded");
+    expect(result.board.triage.inbox.cards[0]?.title).toBe("Refreshed after failure");
+  });
 });
+
+const vocabulary: LabelVocabulary = {
+  labelsByRole: {
+    "needs-triage": "needs-triage",
+    "needs-info": "needs-info",
+    "ready-for-agent": "ready-for-agent",
+    "ready-for-human": "ready-for-human",
+    wontfix: "wontfix",
+  },
+};
 
 function board(options: { firstInboxTitle?: string } = {}): IssueBoard {
   return {
@@ -92,5 +142,28 @@ function card(number: number, title: string, workflowLabels: string[], bodyPrevi
     updatedAge: "1h ago",
     updatedAt: "2026-05-22T12:00:00Z",
     workflowLabels,
+  };
+}
+
+function fakeMutationGateway(
+  calls: string[],
+  options: { failAddLabel?: boolean } = {},
+): IssueMutationGateway {
+  return {
+    async addLabel(issueNumber, label) {
+      calls.push(`add:${issueNumber}:${label}`);
+      if (options.failAddLabel) {
+        throw new Error("GitHub refused label");
+      }
+    },
+    async closeIssue(issueNumber) {
+      calls.push(`close:${issueNumber}`);
+    },
+    async refresh() {
+      calls.push("refresh");
+    },
+    async removeLabel(issueNumber, label) {
+      calls.push(`remove:${issueNumber}:${label}`);
+    },
   };
 }
