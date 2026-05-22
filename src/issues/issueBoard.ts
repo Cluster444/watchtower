@@ -110,19 +110,27 @@ export function formatBodyPreview(
 
 export function renderIssueBoardLines(board: IssueBoard, screen: "triage" | "run"): string[] {
   if (screen === "run") {
-    return [
-      ...renderLaneLines(board.run.readyToRun),
-      "",
-      ...renderLaneLines(board.run.closed),
-    ];
+    return renderScreenLaneLines([board.run.readyToRun, board.run.closed]);
   }
 
+  const triageLanes = getTriageLanes(board);
+  if (areLanesEmpty(triageLanes)) {
+    return ["Triage (0)", "No triage issues."];
+  }
+
+  return renderScreenLaneLines(triageLanes);
+}
+
+function getTriageLanes(board: IssueBoard): IssueLane[] {
   return [
-    ...renderLaneLines(board.triage.inbox),
-    "",
-    ...CANONICAL_TRIAGE_ROLES.flatMap((role) => [...renderLaneLines(board.triage[role]), ""]),
-    ...renderLaneLines(board.triage.conflicted),
+    board.triage.inbox,
+    ...CANONICAL_TRIAGE_ROLES.map((role) => board.triage[role]),
+    board.triage.conflicted,
   ];
+}
+
+function areLanesEmpty(lanes: readonly IssueLane[]): boolean {
+  return lanes.every((lane) => lane.cards.length === 0);
 }
 
 function createEmptyIssueBoard(): IssueBoard {
@@ -247,6 +255,12 @@ function formatUpdatedAge(updatedAt: Date, now: Date): string {
   }
 
   return `${Math.floor(months / 12)}y ago`;
+}
+
+function renderScreenLaneLines(lanes: readonly IssueLane[]): string[] {
+  return lanes.flatMap((lane, index) =>
+    index === lanes.length - 1 ? renderLaneLines(lane) : [...renderLaneLines(lane), ""],
+  );
 }
 
 function renderLaneLines(lane: IssueLane): string[] {
