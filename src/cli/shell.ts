@@ -63,6 +63,7 @@ const MOVE_MENU_OPTIONS = [
   "Esc cancel",
 ].join(" | ");
 const CONFIRMATION_REQUIRED_STATUS_FRAGMENT = "requires confirmation";
+const RENDERER_SHUTDOWN_SIGNALS = ["SIGINT", "SIGTERM"] as const;
 
 export function reduceShellState(
   state: WatchtowerShellState,
@@ -263,8 +264,13 @@ export async function runWatchtowerCli(): Promise<void> {
     status: "CLI shell ready",
   };
   let hasRenderedShell = false;
+  let isRendererDestroyed = false;
 
   const render = () => {
+    if (isRendererDestroyed) {
+      return;
+    }
+
     if (hasRenderedShell) {
       renderer.root.remove(WATCHTOWER_SHELL_ID);
     }
@@ -272,6 +278,19 @@ export async function runWatchtowerCli(): Promise<void> {
     renderer.root.add(createWatchtowerShellView(state));
     hasRenderedShell = true;
   };
+
+  const destroyRenderer = () => {
+    if (isRendererDestroyed) {
+      return;
+    }
+
+    isRendererDestroyed = true;
+    renderer.destroy();
+  };
+
+  for (const signal of RENDERER_SHUTDOWN_SIGNALS) {
+    process.once(signal, destroyRenderer);
+  }
 
   const retrySetupPreflight = () => {
     state = {
@@ -347,7 +366,7 @@ export async function runWatchtowerCli(): Promise<void> {
     }
 
     if (action === "exit") {
-      renderer.destroy();
+      destroyRenderer();
       return true;
     }
 
