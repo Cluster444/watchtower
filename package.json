@@ -1,8 +1,19 @@
 {
-  "dependencies": {},
+  "bin": {
+    "watchtower": "./index.ts"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.2.15"
+  },
   "devDependencies": {
     "@ai-hero/sandcastle": "^0.5.11",
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "bun": "^1.3.14"
+  },
+  "scripts": {
+    "dev": "bun run index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
   },
   "name": "watchtower",
   "module": "index.ts",
