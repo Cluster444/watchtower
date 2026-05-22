@@ -31,7 +31,7 @@ describe("reduceShellState", () => {
     expect(reduceShellState(state, "refresh")).toEqual({
       preflight: { ok: true },
       screen: "run",
-      status: "Refresh placeholder",
+      status: "Refresh requested",
     });
     expect(reduceShellState(state, "moveSelectionDown")).toEqual({
       preflight: { ok: true },
@@ -70,7 +70,7 @@ describe("reduceShellState", () => {
     expect(reduceShellState(state, "switchToRun")).toBe(state);
     expect(reduceShellState(state, "refresh")).toEqual({
       ...state,
-      status: "Refresh placeholder",
+      status: "Refresh requested",
     });
   });
 });
