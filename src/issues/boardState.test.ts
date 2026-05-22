@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 import {
   createBoardState,
   getSelectedIssueUrl,
+  markSelectedIssueReadyToRun,
   moveSelectedIssueToTriageDestination,
   reduceBoardState,
   refreshBoardState,
+  unmarkSelectedIssueReadyToRun,
   type BoardDataLoader,
 } from "./boardState";
 import type { IssueBoard } from "./issueBoard";
@@ -150,6 +152,105 @@ describe("boardState", () => {
     expect(result.status).toContain("Earlier mutation steps may have succeeded");
     expect(result.board.triage.inbox.cards[0]?.title).toBe("Refreshed after close failure");
   });
+
+  test("marks a ready-for-agent triage issue ready to run and refreshes", async () => {
+    const calls: string[] = [];
+    const gateway = fakeMutationGateway(calls);
+    const state = reduceBoardState(createBoardState(board()), { type: "moveSelectionRight" });
+
+    const result = await markSelectedIssueReadyToRun(
+      state,
+      vocabulary,
+      gateway,
+      async () => board({ readyToRunTitle: "Promoted from GitHub" }),
+    );
+
+    expect(calls).toEqual(["add:303:Sandcastle", "refresh"]);
+    expect(result.status).toBe("Mark #303 ready to run complete. Refreshed from GitHub.");
+    expect(result.board.run.readyToRun.cards[0]?.title).toBe("Promoted from GitHub");
+  });
+
+  test("requires confirmation before promoting a non-ready triage issue", async () => {
+    const calls: string[] = [];
+    const gateway = fakeMutationGateway(calls);
+
+    const result = await markSelectedIssueReadyToRun(
+      createBoardState(board()),
+      vocabulary,
+      gateway,
+      async () => board({ readyToRunTitle: "Should not refresh" }),
+    );
+
+    expect(calls).toEqual([]);
+    expect(result.status).toBe("Mark #101 ready to run outside ready-for-agent requires confirmation.");
+  });
+
+  test("requires one combined confirmation before promoting a conflicted non-ready issue", async () => {
+    const calls: string[] = [];
+    const gateway = fakeMutationGateway(calls);
+    let state = createBoardState(board());
+    state = reduceBoardState(state, { type: "moveSelectionRight" });
+    state = reduceBoardState(state, { type: "moveSelectionRight" });
+
+    const result = await markSelectedIssueReadyToRun(
+      state,
+      vocabulary,
+      gateway,
+      async () => board({ readyToRunTitle: "Should not refresh" }),
+    );
+
+    expect(calls).toEqual([]);
+    expect(result.status).toBe("Mark conflicted #505 ready to run outside ready-for-agent requires confirmation.");
+  });
+
+  test("confirmed promotion applies Sandcastle and refreshes", async () => {
+    const calls: string[] = [];
+    const gateway = fakeMutationGateway(calls);
+
+    const result = await markSelectedIssueReadyToRun(
+      createBoardState(board()),
+      vocabulary,
+      gateway,
+      async () => board({ readyToRunTitle: "Confirmed promotion" }),
+      { confirmed: true },
+    );
+
+    expect(calls).toEqual(["add:101:Sandcastle", "refresh"]);
+    expect(result.status).toBe("Mark #101 ready to run outside ready-for-agent complete. Refreshed from GitHub.");
+    expect(result.board.run.readyToRun.cards[0]?.title).toBe("Confirmed promotion");
+  });
+
+  test("unmarks an open ready-to-run issue and refreshes", async () => {
+    const calls: string[] = [];
+    const gateway = fakeMutationGateway(calls);
+    const state = createBoardState(board(), { screen: "run" });
+
+    const result = await unmarkSelectedIssueReadyToRun(
+      state,
+      gateway,
+      async () => board({ firstInboxTitle: "Demoted from GitHub" }),
+    );
+
+    expect(calls).toEqual(["remove:404:Sandcastle", "refresh"]);
+    expect(result.status).toBe("Unmark #404 ready to run complete. Refreshed from GitHub.");
+    expect(result.board.triage.inbox.cards[0]?.title).toBe("Demoted from GitHub");
+  });
+
+  test("rejects demotion for closed run-screen issues", async () => {
+    const calls: string[] = [];
+    const gateway = fakeMutationGateway(calls);
+    let state = createBoardState(board(), { screen: "run" });
+    state = reduceBoardState(state, { type: "moveSelectionRight" });
+
+    const result = await unmarkSelectedIssueReadyToRun(
+      state,
+      gateway,
+      async () => board({ firstInboxTitle: "Should not refresh" }),
+    );
+
+    expect(calls).toEqual([]);
+    expect(result.status).toBe("Closed run-screen issues cannot be unmarked in phase one.");
+  });
 });
 
 const vocabulary: LabelVocabulary = {
@@ -162,7 +263,7 @@ const vocabulary: LabelVocabulary = {
   },
 };
 
-function board(options: { firstInboxTitle?: string } = {}): IssueBoard {
+function board(options: { firstInboxTitle?: string; readyToRunTitle?: string } = {}): IssueBoard {
   return {
     triage: {
       inbox: lane("Inbox", [
@@ -174,11 +275,11 @@ function board(options: { firstInboxTitle?: string } = {}): IssueBoard {
       "ready-for-agent": lane("Ready for agent", [card(303, "OAuth callback", ["ready-for-agent"], "token refresh fails")]),
       "ready-for-human": lane("Ready for human", []),
       wontfix: lane("Wontfix", []),
-      conflicted: lane("Conflicted", []),
+      conflicted: lane("Conflicted", [card(505, "Conflicted issue", ["needs-info", "ready-for-human"], "ambiguous")]),
     },
     run: {
-      readyToRun: lane("Ready to run", [card(404, "Run it", ["Sandcastle"], "ready")]),
-      closed: lane("Closed", []),
+      readyToRun: lane("Ready to run", [card(404, options.readyToRunTitle ?? "Run it", ["Sandcastle"], "ready")]),
+      closed: lane("Closed", [card(606, "Closed run", ["Sandcastle"], "done")]),
     },
   };
 }

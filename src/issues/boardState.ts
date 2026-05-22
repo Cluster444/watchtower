@@ -2,8 +2,11 @@ import type { IssueBoard, IssueCard, IssueLane } from "./issueBoard";
 import type { LabelVocabulary } from "../setup/labelVocabulary";
 import {
   executeMutationPlan,
+  planReadyToRunDemotion,
+  planReadyToRunPromotion,
   planTriageMove,
   type IssueMutationGateway,
+  type MutationPlan,
   type TriageMoveDestination,
 } from "./triageActions";
 
@@ -47,7 +50,9 @@ export type BoardStateAction =
   | { type: "setSearchQuery"; query: string };
 
 export type BoardDataLoader = () => Promise<IssueBoard>;
-export type TriageMoveOptions = { confirmed?: boolean };
+export type MutationConfirmationOptions = { confirmed?: boolean };
+export type TriageMoveOptions = MutationConfirmationOptions;
+export type ReadyToRunOptions = MutationConfirmationOptions;
 
 const TRIAGE_LANE_KEYS: readonly TriageLaneKey[] = [
   "inbox",
@@ -154,6 +159,58 @@ export async function moveSelectedIssueToTriageDestination(
   }
 
   const plan = planTriageMove({ card, destination, vocabulary });
+  return executeSelectedIssueMutation(state, plan, gateway, loadBoard, options);
+}
+
+export async function markSelectedIssueReadyToRun(
+  state: BoardState,
+  vocabulary: LabelVocabulary,
+  gateway: IssueMutationGateway,
+  loadBoard: BoardDataLoader,
+  options: ReadyToRunOptions = {},
+): Promise<BoardState> {
+  const card = getSelectedCard(state);
+  if (card === undefined || state.selection.screen !== "triage") {
+    return { ...state, status: "No triage issue is selected." };
+  }
+
+  const plan = planReadyToRunPromotion({ card, vocabulary });
+  return executeSelectedIssueMutation(state, plan, gateway, loadBoard, options);
+}
+
+export async function unmarkSelectedIssueReadyToRun(
+  state: BoardState,
+  gateway: IssueMutationGateway,
+  loadBoard: BoardDataLoader,
+): Promise<BoardState> {
+  const card = getSelectedCard(state);
+  if (card === undefined || state.selection.screen !== "run") {
+    return { ...state, status: "No run issue is selected." };
+  }
+
+  if (state.selection.laneKey === "closed") {
+    return { ...state, status: "Closed run-screen issues cannot be unmarked in phase one." };
+  }
+
+  const plan = planReadyToRunDemotion({ card });
+  return executeSelectedIssueMutation(state, plan, gateway, loadBoard);
+}
+
+function applyRefreshedBoard(state: BoardState, board: IssueBoard): BoardState {
+  return normalizeSelection({
+    ...state,
+    board,
+    visibleBoard: filterIssueBoard(board, state.searchQuery),
+  });
+}
+
+async function executeSelectedIssueMutation(
+  state: BoardState,
+  plan: MutationPlan,
+  gateway: IssueMutationGateway,
+  loadBoard: BoardDataLoader,
+  options: MutationConfirmationOptions = {},
+): Promise<BoardState> {
   if (plan.requiresConfirmation && options.confirmed !== true) {
     return { ...state, status: `${plan.description} requires confirmation.` };
   }
@@ -174,14 +231,6 @@ export async function moveSelectedIssueToTriageDestination(
     ...nextState,
     status: result.message,
   };
-}
-
-function applyRefreshedBoard(state: BoardState, board: IssueBoard): BoardState {
-  return normalizeSelection({
-    ...state,
-    board,
-    visibleBoard: filterIssueBoard(board, state.searchQuery),
-  });
 }
 
 export function getSelectedIssueUrl(state: BoardState): string | undefined {

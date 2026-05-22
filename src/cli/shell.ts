@@ -5,11 +5,14 @@ import { mapInputToAction, type WatchtowerAction } from "../input/actions";
 import {
   createBoardState,
   getSelectedIssueUrl,
+  markSelectedIssueReadyToRun,
   moveSelectedIssueToTriageDestination,
   reduceBoardState,
   refreshBoardState,
+  unmarkSelectedIssueReadyToRun,
   type BoardState,
   type BoardStateAction,
+  type ReadyToRunOptions,
   type TriageMoveOptions,
 } from "../issues/boardState";
 import { GhIssueGateway } from "../issues/githubGateway";
@@ -32,6 +35,7 @@ export type WatchtowerShellState = {
   labelVocabulary?: LabelVocabulary;
   moveMenuOpen: boolean;
   pendingDestructiveMove?: TriageMoveDestination;
+  pendingReadyToRunPromotion?: boolean;
   preflight: SetupPreflightResult;
   screen: WatchtowerScreen;
   status: string;
@@ -96,9 +100,9 @@ export function reduceShellState(
         ? { ...state, status: "No issue is selected." }
         : { ...state, moveMenuOpen: true, status: "Move menu opened" };
     case "markReadyToRun":
-      return { ...state, status: "Mark ready placeholder" };
+      return { ...state, status: "Mark ready to run requested" };
     case "unmarkReadyToRun":
-      return { ...state, status: "Unmark ready placeholder" };
+      return { ...state, status: "Unmark ready to run requested" };
     case "openSelectedIssue":
       return { ...state, status: getSelectedIssueUrlFromShell(state) ?? "No issue is selected." };
     case "retryPreflight":
@@ -108,7 +112,7 @@ export function reduceShellState(
     case "cancel":
       return cancelActivePrompt(state);
     case "confirmDestructiveAction":
-      return confirmPendingDestructiveMove(state);
+      return confirmPendingAction(state);
     case "moveSelectionUp":
       return applyBoardAction(state, { type: "moveSelectionUp" }, { status: "Selection movement placeholder" });
     case "moveSelectionDown":
@@ -145,10 +149,10 @@ function syncShellWithBoardState(state: WatchtowerShellState, boardState: BoardS
 }
 
 function cancelActivePrompt(state: WatchtowerShellState): WatchtowerShellState {
-  return clearMovePrompt(state, { status: "Canceled" });
+  return clearPendingActionPrompt(state, { status: "Canceled" });
 }
 
-function clearMovePrompt(
+function clearPendingActionPrompt(
   state: WatchtowerShellState,
   patch: Pick<WatchtowerShellState, "status">,
 ): WatchtowerShellState {
@@ -157,10 +161,19 @@ function clearMovePrompt(
     ...patch,
     moveMenuOpen: false,
     pendingDestructiveMove: undefined,
+    pendingReadyToRunPromotion: undefined,
   };
 }
 
-function confirmPendingDestructiveMove(state: WatchtowerShellState): WatchtowerShellState {
+function confirmPendingAction(state: WatchtowerShellState): WatchtowerShellState {
+  if (state.pendingReadyToRunPromotion === true) {
+    return {
+      ...state,
+      pendingReadyToRunPromotion: undefined,
+      status: "Confirmed mark ready to run",
+    };
+  }
+
   if (state.pendingDestructiveMove === undefined) {
     return { ...state, status: "No destructive action is pending." };
   }
@@ -191,7 +204,7 @@ export function createWatchtowerShellView(state: WatchtowerShellState) {
     Text({ content: `Screen: ${SCREEN_LABELS[state.screen]}` }),
     Text({ content: state.status, fg: "#F9E2AF" }),
     ...renderBoardText(state),
-    ...renderMoveMenuText(state),
+    ...renderActionPromptText(state),
     Text({ content: "1/t triage | 2/r run | / search | Ctrl+R refresh | q exit" }),
   );
 }
@@ -338,6 +351,13 @@ export async function runWatchtowerCli(): Promise<void> {
       return true;
     }
 
+    if (action === "confirmDestructiveAction" && state.pendingReadyToRunPromotion === true) {
+      state = reduceShellState(state, action);
+      render();
+      void markReadyToRun({ confirmed: true });
+      return true;
+    }
+
     if (action === "confirmDestructiveAction" && state.pendingDestructiveMove !== undefined) {
       const destination = state.pendingDestructiveMove;
       state = reduceShellState(state, action);
@@ -358,6 +378,12 @@ export async function runWatchtowerCli(): Promise<void> {
     }
     if (action === "openSelectedIssue" && state.preflight.ok) {
       void openSelectedIssue();
+    }
+    if (action === "markReadyToRun" && state.preflight.ok) {
+      void markReadyToRun();
+    }
+    if (action === "unmarkReadyToRun" && state.preflight.ok) {
+      void unmarkReadyToRun();
     }
     return true;
   });
@@ -394,12 +420,22 @@ export async function runWatchtowerCli(): Promise<void> {
     return true;
   }
 
+  function createShellIssueMutationGateway(): IssueMutationGateway {
+    return createIssueMutationGateway(new GhIssueGateway({ cwd: process.cwd() }));
+  }
+
+  async function loadIssueBoardForMutation(): Promise<IssueBoard> {
+    const data = await loadIssueBoard(process.cwd());
+    state = { ...state, labelVocabulary: data.vocabulary };
+    return data.board;
+  }
+
   async function moveSelectedIssue(
     destination: TriageMoveDestination,
     options: TriageMoveOptions = {},
   ): Promise<void> {
     if (state.boardState === undefined || state.labelVocabulary === undefined) {
-      state = clearMovePrompt(state, { status: "No issue is selected." });
+      state = clearPendingActionPrompt(state, { status: "No issue is selected." });
       render();
       return;
     }
@@ -414,25 +450,80 @@ export async function runWatchtowerCli(): Promise<void> {
     };
     render();
 
-    const gateway = new GhIssueGateway({ cwd: process.cwd() });
-    const loadBoard = () => loadIssueBoard(process.cwd()).then((data) => {
-      state = { ...state, labelVocabulary: data.vocabulary };
-      return data.board;
-    });
     state = syncShellWithBoardState(
       state,
       await moveSelectedIssueToTriageDestination(
         boardState,
         destination,
         labelVocabulary,
-        createIssueMutationGateway(gateway),
-        loadBoard,
+        createShellIssueMutationGateway(),
+        loadIssueBoardForMutation,
         options,
       ),
     );
     if (isPendingDestructiveMove(destination, options, state.status)) {
       state = { ...state, pendingDestructiveMove: destination };
     }
+    render();
+  }
+
+  async function markReadyToRun(options: ReadyToRunOptions = {}): Promise<void> {
+    if (state.boardState === undefined || state.labelVocabulary === undefined) {
+      state = { ...state, status: "No triage issue is selected." };
+      render();
+      return;
+    }
+
+    const boardState = state.boardState;
+    const labelVocabulary = state.labelVocabulary;
+    state = {
+      ...state,
+      moveMenuOpen: false,
+      pendingReadyToRunPromotion: undefined,
+      status: formatReadyToRunInProgressStatus(options),
+    };
+    render();
+
+    state = syncShellWithBoardState(
+      state,
+      await markSelectedIssueReadyToRun(
+        boardState,
+        labelVocabulary,
+        createShellIssueMutationGateway(),
+        loadIssueBoardForMutation,
+        options,
+      ),
+    );
+    if (isPendingReadyToRunPromotion(options, state.status)) {
+      state = { ...state, pendingReadyToRunPromotion: true };
+    }
+    render();
+  }
+
+  async function unmarkReadyToRun(): Promise<void> {
+    if (state.boardState === undefined) {
+      state = { ...state, status: "No run issue is selected." };
+      render();
+      return;
+    }
+
+    const boardState = state.boardState;
+    state = {
+      ...state,
+      moveMenuOpen: false,
+      pendingReadyToRunPromotion: undefined,
+      status: "Unmarking selected issue ready to run",
+    };
+    render();
+
+    state = syncShellWithBoardState(
+      state,
+      await unmarkSelectedIssueReadyToRun(
+        boardState,
+        createShellIssueMutationGateway(),
+        loadIssueBoardForMutation,
+      ),
+    );
     render();
   }
 
@@ -476,8 +567,14 @@ function renderBoardText(state: WatchtowerShellState) {
   ];
 }
 
-function renderMoveMenuText(state: WatchtowerShellState) {
+function renderActionPromptText(state: WatchtowerShellState) {
   if (!state.moveMenuOpen) {
+    if (state.pendingReadyToRunPromotion === true) {
+      return [
+        Text({ content: "Mark ready to run requires confirmation." }),
+        Text({ content: "Enter confirm | Esc cancel" }),
+      ];
+    }
     if (state.pendingDestructiveMove !== undefined) {
       return [
         Text({ content: `${formatMoveMenuDestination(state.pendingDestructiveMove)} requires confirmation.` }),
@@ -510,6 +607,18 @@ function formatMoveInProgressStatus(options: TriageMoveOptions): string {
   return "Moving selected issue";
 }
 
+function formatReadyToRunInProgressStatus(options: ReadyToRunOptions): string {
+  if (options.confirmed === true) {
+    return "Marking selected issue ready to run";
+  }
+
+  return "Checking selected issue readiness";
+}
+
+function isConfirmationRequiredStatus(status: string): boolean {
+  return status.includes(CONFIRMATION_REQUIRED_STATUS_FRAGMENT);
+}
+
 function isPendingDestructiveMove(
   destination: TriageMoveDestination,
   options: TriageMoveOptions,
@@ -518,8 +627,12 @@ function isPendingDestructiveMove(
   return (
     requiresTriageMoveConfirmation(destination) &&
     options.confirmed !== true &&
-    status.includes(CONFIRMATION_REQUIRED_STATUS_FRAGMENT)
+    isConfirmationRequiredStatus(status)
   );
+}
+
+function isPendingReadyToRunPromotion(options: ReadyToRunOptions, status: string): boolean {
+  return options.confirmed !== true && isConfirmationRequiredStatus(status);
 }
 
 function formatErrorMessage(error: unknown): string {

@@ -124,4 +124,26 @@ describe("reduceShellState", () => {
       status: "Confirmed Close as wontfix",
     });
   });
+
+  test("confirmation actions clear a pending ready-to-run promotion prompt", () => {
+    const state: WatchtowerShellState = {
+      boardState: {} as WatchtowerShellState["boardState"],
+      moveMenuOpen: false,
+      pendingReadyToRunPromotion: true,
+      preflight: { ok: true },
+      screen: "triage",
+      status: "Mark #101 ready to run outside ready-for-agent requires confirmation.",
+    };
+
+    expect(reduceShellState(state, "cancel")).toEqual({
+      ...state,
+      pendingReadyToRunPromotion: undefined,
+      status: "Canceled",
+    });
+    expect(reduceShellState(state, "confirmDestructiveAction")).toEqual({
+      ...state,
+      pendingReadyToRunPromotion: undefined,
+      status: "Confirmed mark ready to run",
+    });
+  });
 });

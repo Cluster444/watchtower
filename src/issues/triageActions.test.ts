@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   executeMutationPlan,
+  planReadyToRunDemotion,
+  planReadyToRunPromotion,
   planTriageMove,
   type IssueMutationGateway,
   type MutationStep,
@@ -61,6 +63,58 @@ describe("planTriageMove", () => {
         { type: "addLabel", issueNumber: 6, label: "wontfix" },
         { type: "closeIssue", issueNumber: 6 },
       ],
+    });
+  });
+});
+
+describe("ready-to-run action planning", () => {
+  test("promotion applies Sandcastle without changing triage labels when ready for agent", () => {
+    const plan = planReadyToRunPromotion({ card: card(["ready-for-agent"]), vocabulary });
+
+    expect(plan).toEqual({
+      description: "Mark #6 ready to run",
+      requiresConfirmation: false,
+      steps: [{ type: "addLabel", issueNumber: 6, label: "Sandcastle" }],
+    });
+  });
+
+  test("promotion requires one confirmation when the issue is not ready for agent", () => {
+    const plan = planReadyToRunPromotion({ card: card(["needs-info"]), vocabulary });
+
+    expect(plan).toEqual({
+      description: "Mark #6 ready to run outside ready-for-agent",
+      requiresConfirmation: true,
+      steps: [{ type: "addLabel", issueNumber: 6, label: "Sandcastle" }],
+    });
+  });
+
+  test("promotion requires one confirmation when the issue is conflicted", () => {
+    const plan = planReadyToRunPromotion({ card: card(["needs-info", "ready-for-agent"]), vocabulary });
+
+    expect(plan).toEqual({
+      description: "Mark conflicted #6 ready to run",
+      requiresConfirmation: true,
+      steps: [{ type: "addLabel", issueNumber: 6, label: "Sandcastle" }],
+    });
+  });
+
+  test("promotion combines non-ready and conflicted confirmation into one prompt", () => {
+    const plan = planReadyToRunPromotion({ card: card(["needs-info", "ready-for-human"]), vocabulary });
+
+    expect(plan).toEqual({
+      description: "Mark conflicted #6 ready to run outside ready-for-agent",
+      requiresConfirmation: true,
+      steps: [{ type: "addLabel", issueNumber: 6, label: "Sandcastle" }],
+    });
+  });
+
+  test("demotion removes Sandcastle without changing triage labels", () => {
+    const plan = planReadyToRunDemotion({ card: card(["Sandcastle", "ready-for-human"]) });
+
+    expect(plan).toEqual({
+      description: "Unmark #6 ready to run",
+      requiresConfirmation: false,
+      steps: [{ type: "removeLabel", issueNumber: 6, label: "Sandcastle" }],
     });
   });
 });

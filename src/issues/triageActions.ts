@@ -3,7 +3,7 @@ import {
   type CanonicalTriageRole,
   type LabelVocabulary,
 } from "../setup/labelVocabulary";
-import type { IssueCard } from "./issueBoard";
+import { SANDCASTLE_LABEL, type IssueCard } from "./issueBoard";
 
 export type TriageMoveDestination = CanonicalTriageRole | "inbox";
 
@@ -68,6 +68,33 @@ export function planTriageMove(options: {
   };
 }
 
+export function planReadyToRunPromotion(options: {
+  card: IssueCard;
+  vocabulary: LabelVocabulary;
+}): MutationPlan {
+  const { card, vocabulary } = options;
+  const triageLabels = canonicalLabelsOnCard(card, vocabulary);
+  const hasReadyForAgentLabel = triageLabels.includes(vocabulary.labelsByRole["ready-for-agent"]);
+  const hasConflictingTriageLabels = triageLabels.length > 1;
+
+  return {
+    description: formatReadyToRunPromotionDescription(card.number, {
+      hasConflictingTriageLabels,
+      hasReadyForAgentLabel,
+    }),
+    requiresConfirmation: !hasReadyForAgentLabel || hasConflictingTriageLabels,
+    steps: [{ type: "addLabel", issueNumber: card.number, label: SANDCASTLE_LABEL }],
+  };
+}
+
+export function planReadyToRunDemotion(options: { card: IssueCard }): MutationPlan {
+  return {
+    description: `Unmark #${options.card.number} ready to run`,
+    requiresConfirmation: false,
+    steps: [{ type: "removeLabel", issueNumber: options.card.number, label: SANDCASTLE_LABEL }],
+  };
+}
+
 export async function executeMutationPlan(
   plan: MutationPlan,
   gateway: IssueMutationGateway,
@@ -101,6 +128,15 @@ function formatTriageMoveDescription(issueNumber: number, destination: TriageMov
     default:
       return `Move #${issueNumber} to ${destination}`;
   }
+}
+
+function formatReadyToRunPromotionDescription(
+  issueNumber: number,
+  options: { hasConflictingTriageLabels: boolean; hasReadyForAgentLabel: boolean },
+): string {
+  const conflictPrefix = options.hasConflictingTriageLabels ? "conflicted " : "";
+  const nonReadySuffix = options.hasReadyForAgentLabel ? "" : " outside ready-for-agent";
+  return `Mark ${conflictPrefix}#${issueNumber} ready to run${nonReadySuffix}`;
 }
 
 function canonicalLabelsOnCard(card: IssueCard, vocabulary: LabelVocabulary): string[] {
