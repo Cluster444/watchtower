@@ -1,0 +1,14 @@
+{
+  "dependencies": {},
+  "devDependencies": {
+    "@ai-hero/sandcastle": "^0.5.11",
+    "@types/bun": "latest"
+  },
+  "name": "watchtower",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
