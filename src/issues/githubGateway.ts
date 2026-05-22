@@ -30,6 +30,17 @@ export class GhIssueGateway {
     return { closedRunIssues, readyToRunIssues, triageIssues };
   }
 
+  async getRepositoryUrl(): Promise<string | undefined> {
+    const result = await this.process.run("gh", ["repo", "view", "--json", "url", "--jq", ".url"], {
+      cwd: this.cwd,
+    });
+    if (result.exitCode !== 0) {
+      return undefined;
+    }
+
+    return result.stdout.trim() || undefined;
+  }
+
   private async searchIssues(state: "open" | "closed", qualifiers: string[]): Promise<GitHubIssue[]> {
     const result = await this.process.run("gh", createIssueSearchArgs(state, qualifiers), {
       cwd: this.cwd,

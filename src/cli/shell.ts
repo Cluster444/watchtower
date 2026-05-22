@@ -2,7 +2,16 @@ import { Box, Text, createCliRenderer } from "@opentui/core";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { mapInputToAction, type WatchtowerAction } from "../input/actions";
+import {
+  createBoardState,
+  getSelectedIssueUrl,
+  reduceBoardState,
+  refreshBoardState,
+  type BoardState,
+  type BoardStateAction,
+} from "../issues/boardState";
 import { GhIssueGateway } from "../issues/githubGateway";
+import { openIssueInBrowser } from "../issues/openIssue";
 import { classifyIssueBoard, renderIssueBoardLines, type IssueBoard } from "../issues/issueBoard";
 import { parseLabelVocabulary } from "../setup/labelVocabulary";
 import { runSetupPreflight, type SetupFailure, type SetupPreflightResult } from "../setup/preflight";
@@ -12,6 +21,7 @@ export type WatchtowerScreen = "triage" | "run";
 
 export type WatchtowerShellState = {
   board?: IssueBoard;
+  boardState?: BoardState;
   preflight: SetupPreflightResult;
   screen: WatchtowerScreen;
   status: string;
@@ -40,13 +50,27 @@ export function reduceShellState(
 
   switch (action) {
     case "switchToTriage":
-      return { ...state, screen: "triage", status: "Triage screen selected" };
+      return applyBoardAction(
+        state,
+        { type: "switchScreen", screen: "triage" },
+        {
+          screen: "triage",
+          status: "Triage screen selected",
+        },
+      );
     case "switchToRun":
-      return { ...state, screen: "run", status: "Run screen selected" };
+      return applyBoardAction(
+        state,
+        { type: "switchScreen", screen: "run" },
+        {
+          screen: "run",
+          status: "Run screen selected",
+        },
+      );
     case "refresh":
       return { ...state, status: "Refresh requested" };
     case "focusSearch":
-      return { ...state, status: "Search placeholder" };
+      return applyBoardAction(state, { type: "focusSearch" }, { status: "Search focused" });
     case "openMoveMenu":
       return { ...state, status: "Move menu placeholder" };
     case "markReadyToRun":
@@ -54,23 +78,48 @@ export function reduceShellState(
     case "unmarkReadyToRun":
       return { ...state, status: "Unmark ready placeholder" };
     case "openSelectedIssue":
-      return { ...state, status: "Open issue placeholder" };
+      return { ...state, status: getSelectedIssueUrlFromShell(state) ?? "No issue is selected." };
     case "retryPreflight":
       return { ...state, status: "Retrying setup preflight" };
     case "clearSearch":
-      return { ...state, status: "Search cleared" };
+      return applyBoardAction(state, { type: "clearSearch" }, { status: "Search cleared" });
     case "cancel":
       return { ...state, status: "Canceled" };
     case "confirmDestructiveAction":
       return { ...state, status: "Confirmed placeholder" };
     case "moveSelectionUp":
+      return applyBoardAction(state, { type: "moveSelectionUp" }, { status: "Selection movement placeholder" });
     case "moveSelectionDown":
+      return applyBoardAction(state, { type: "moveSelectionDown" }, { status: "Selection movement placeholder" });
     case "moveSelectionLeft":
+      return applyBoardAction(state, { type: "moveSelectionLeft" }, { status: "Selection movement placeholder" });
     case "moveSelectionRight":
-      return { ...state, status: "Selection movement placeholder" };
+      return applyBoardAction(state, { type: "moveSelectionRight" }, { status: "Selection movement placeholder" });
     case "exit":
       return state;
   }
+}
+
+function applyBoardAction(
+  state: WatchtowerShellState,
+  action: BoardStateAction,
+  unloadedPatch: Partial<Pick<WatchtowerShellState, "screen" | "status">>,
+): WatchtowerShellState {
+  if (state.boardState === undefined) {
+    return { ...state, ...unloadedPatch };
+  }
+
+  return syncShellWithBoardState(state, reduceBoardState(state.boardState, action));
+}
+
+function syncShellWithBoardState(state: WatchtowerShellState, boardState: BoardState): WatchtowerShellState {
+  return {
+    ...state,
+    board: boardState.visibleBoard,
+    boardState,
+    screen: boardState.screen,
+    status: boardState.status,
+  };
 }
 
 export function createWatchtowerShellView(state: WatchtowerShellState) {
@@ -184,13 +233,20 @@ export async function runWatchtowerCli(): Promise<void> {
     state = { ...state, status: "Loading GitHub issues" };
     render();
 
-    void loadIssueBoard(process.cwd())
-      .then((board) => {
-        state = {
-          ...state,
-          board,
-          status: "GitHub issues loaded",
-        };
+    const loadBoard = () => loadIssueBoard(process.cwd());
+    const refresh =
+      state.boardState === undefined
+        ? loadBoard().then(async (board) =>
+            createBoardState(board, {
+              repositoryUrl: await getRepositoryUrl(process.cwd()),
+              screen: state.screen,
+            }),
+          )
+        : refreshBoardState(state.boardState, loadBoard);
+
+    void refresh
+      .then((boardState) => {
+        state = syncShellWithBoardState(state, boardState);
         render();
       })
       .catch((error) => {
@@ -204,6 +260,18 @@ export async function runWatchtowerCli(): Promise<void> {
 
   renderer.addInputHandler((inputSequence) => {
     const action = mapInputToAction({ type: "terminal", sequence: inputSequence });
+    if (action === undefined && state.boardState?.searchFocused === true && isSearchTextInput(inputSequence)) {
+      state = syncShellWithBoardState(
+        state,
+        reduceBoardState(state.boardState, {
+          type: "setSearchQuery",
+          query: `${state.boardState.searchQuery}${inputSequence}`,
+        }),
+      );
+      render();
+      return true;
+    }
+
     if (action === undefined) {
       return false;
     }
@@ -223,8 +291,28 @@ export async function runWatchtowerCli(): Promise<void> {
     if (action === "refresh" && state.preflight.ok) {
       refreshIssueBoard();
     }
+    if (action === "openSelectedIssue" && state.preflight.ok) {
+      void openSelectedIssue();
+    }
     return true;
   });
+
+  async function openSelectedIssue(): Promise<void> {
+    const url = getSelectedIssueUrlFromShell(state);
+    if (url === undefined) {
+      state = { ...state, status: "No issue is selected." };
+      render();
+      return;
+    }
+
+    const result = await openIssueInBrowser(url);
+    if (result.opened === true) {
+      state = { ...state, status: "Opened selected issue in GitHub" };
+    } else {
+      state = { ...state, status: `${result.reason} ${result.fallbackUrl}` };
+    }
+    render();
+  }
 
   render();
   refreshIssueBoard();
@@ -243,18 +331,54 @@ export async function loadIssueBoard(cwd: string): Promise<IssueBoard> {
 }
 
 function renderBoardText(state: WatchtowerShellState) {
-  if (state.board === undefined) {
+  const board = state.boardState?.visibleBoard ?? state.board;
+  if (board === undefined) {
     return [Text({ content: "Issue board has not loaded yet." })];
   }
 
-  return renderIssueBoardLines(state.board, state.screen).map((line) =>
+  return [
     Text({
-      content: line,
-      fg: line.startsWith("#") ? "#CDD6F4" : "#A6ADC8",
+      content: `Search: ${state.boardState?.searchQuery ?? ""}`,
+      fg: state.boardState?.searchFocused ? "#A6E3A1" : "#A6ADC8",
     }),
-  );
+    Text({
+      content: `Selected: ${renderSelectionSummary(state.boardState)}`,
+      fg: "#A6ADC8",
+    }),
+    ...renderIssueBoardLines(board, state.screen).map((line) =>
+      Text({
+        content: line,
+        fg: line.startsWith("#") ? "#CDD6F4" : "#A6ADC8",
+      }),
+    ),
+  ];
 }
 
 function formatErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function getSelectedIssueUrlFromShell(state: WatchtowerShellState): string | undefined {
+  if (state.boardState === undefined) {
+    return undefined;
+  }
+
+  return getSelectedIssueUrl(state.boardState);
+}
+
+function renderSelectionSummary(boardState: BoardState | undefined): string {
+  if (boardState === undefined) {
+    return "none";
+  }
+
+  return `${boardState.selection.laneKey} card ${boardState.selection.cardIndex + 1}`;
+}
+
+async function getRepositoryUrl(cwd: string): Promise<string | undefined> {
+  const gateway = new GhIssueGateway({ cwd });
+  return gateway.getRepositoryUrl();
+}
+
+function isSearchTextInput(inputSequence: string): boolean {
+  return inputSequence.length === 1 && inputSequence >= " " && inputSequence !== "\x7f";
 }

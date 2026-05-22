@@ -49,6 +49,17 @@ describe("GhIssueGateway", () => {
       updatedAt: "2026-05-22T12:00:00Z",
     });
   });
+
+  test("loads the repository URL for issue links", async () => {
+    const calls: string[][] = [];
+    const gateway = new GhIssueGateway({
+      cwd: "/repo",
+      process: fakeProcess(calls, "https://github.com/Cluster444/watchtower\n"),
+    });
+
+    await expect(gateway.getRepositoryUrl()).resolves.toBe("https://github.com/Cluster444/watchtower");
+    expect(calls).toEqual([["gh", "repo", "view", "--json", "url", "--jq", ".url"]]);
+  });
 });
 
 function expectedIssueSearchCall(state: "open" | "closed", labelQualifier: string): string[] {

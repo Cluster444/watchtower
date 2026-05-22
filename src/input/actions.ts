@@ -58,6 +58,7 @@ const TERMINAL_BINDINGS: ReadonlyMap<string, WatchtowerAction> = new Map([
   ["\x1b", "cancel"],
   ["\x03", "exit"],
   ["\x12", "refresh"],
+  ["\x7f", "clearSearch"],
   ["\r", "confirmDestructiveAction"],
   ["\n", "confirmDestructiveAction"],
 ]);
@@ -67,7 +68,7 @@ export function mapInputToAction(inputEvent: RawInputEvent): WatchtowerAction | 
     case "mouse":
       return undefined;
     case "terminal":
-      return TERMINAL_BINDINGS.get(inputEvent.sequence);
+      return TERMINAL_BINDINGS.get(inputEvent.sequence) ?? KEY_BINDINGS.get(normalizeKey(inputEvent.sequence));
     case "key":
       return KEY_BINDINGS.get(normalizeKey(inputEvent.key));
   }

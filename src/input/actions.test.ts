@@ -15,7 +15,10 @@ describe("mapInputToAction", () => {
     expect(mapInputToAction({ type: "key", key: "q" })).toBe("exit");
     expect(mapInputToAction({ type: "terminal", sequence: "\x03" })).toBe("exit");
     expect(mapInputToAction({ type: "key", key: "/" })).toBe("focusSearch");
+    expect(mapInputToAction({ type: "terminal", sequence: "/" })).toBe("focusSearch");
     expect(mapInputToAction({ type: "key", key: "enter" })).toBe("confirmDestructiveAction");
+    expect(mapInputToAction({ type: "terminal", sequence: "o" })).toBe("openSelectedIssue");
+    expect(mapInputToAction({ type: "terminal", sequence: "\x7f" })).toBe("clearSearch");
   });
 
   test("leaves unmapped input and mouse events without an action", () => {
