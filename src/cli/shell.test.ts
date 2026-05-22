@@ -102,4 +102,26 @@ describe("reduceShellState", () => {
       status: "Canceled",
     });
   });
+
+  test("confirmation actions clear a pending Close as wontfix prompt", () => {
+    const state: WatchtowerShellState = {
+      boardState: {} as WatchtowerShellState["boardState"],
+      moveMenuOpen: false,
+      pendingDestructiveMove: "wontfix",
+      preflight: { ok: true },
+      screen: "triage",
+      status: "Close #101 as wontfix requires confirmation.",
+    };
+
+    expect(reduceShellState(state, "cancel")).toEqual({
+      ...state,
+      pendingDestructiveMove: undefined,
+      status: "Canceled",
+    });
+    expect(reduceShellState(state, "confirmDestructiveAction")).toEqual({
+      ...state,
+      pendingDestructiveMove: undefined,
+      status: "Confirmed Close as wontfix",
+    });
+  });
 });

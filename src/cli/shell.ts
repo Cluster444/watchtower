@@ -10,11 +10,16 @@ import {
   refreshBoardState,
   type BoardState,
   type BoardStateAction,
+  type TriageMoveOptions,
 } from "../issues/boardState";
 import { GhIssueGateway } from "../issues/githubGateway";
 import { openIssueInBrowser } from "../issues/openIssue";
 import { classifyIssueBoard, renderIssueBoardLines, type IssueBoard } from "../issues/issueBoard";
-import type { IssueMutationGateway, TriageMoveDestination } from "../issues/triageActions";
+import {
+  requiresTriageMoveConfirmation,
+  type IssueMutationGateway,
+  type TriageMoveDestination,
+} from "../issues/triageActions";
 import { parseLabelVocabulary, type LabelVocabulary } from "../setup/labelVocabulary";
 import { runSetupPreflight, type SetupFailure, type SetupPreflightResult } from "../setup/preflight";
 import { formatPreflightFailureLines } from "../setup/preflightScreen";
@@ -26,6 +31,7 @@ export type WatchtowerShellState = {
   boardState?: BoardState;
   labelVocabulary?: LabelVocabulary;
   moveMenuOpen: boolean;
+  pendingDestructiveMove?: TriageMoveDestination;
   preflight: SetupPreflightResult;
   screen: WatchtowerScreen;
   status: string;
@@ -49,9 +55,10 @@ const MOVE_MENU_OPTIONS = [
   "2 needs-info",
   "3 ready-for-agent",
   "4 ready-for-human",
-  "5 wontfix",
+  "5 Close as wontfix",
   "Esc cancel",
 ].join(" | ");
+const CONFIRMATION_REQUIRED_STATUS_FRAGMENT = "requires confirmation";
 
 export function reduceShellState(
   state: WatchtowerShellState,
@@ -99,9 +106,9 @@ export function reduceShellState(
     case "clearSearch":
       return applyBoardAction(state, { type: "clearSearch" }, { status: "Search cleared" });
     case "cancel":
-      return { ...state, moveMenuOpen: false, status: "Canceled" };
+      return cancelActivePrompt(state);
     case "confirmDestructiveAction":
-      return { ...state, status: "Confirmed placeholder" };
+      return confirmPendingDestructiveMove(state);
     case "moveSelectionUp":
       return applyBoardAction(state, { type: "moveSelectionUp" }, { status: "Selection movement placeholder" });
     case "moveSelectionDown":
@@ -134,6 +141,34 @@ function syncShellWithBoardState(state: WatchtowerShellState, boardState: BoardS
     boardState,
     screen: boardState.screen,
     status: boardState.status,
+  };
+}
+
+function cancelActivePrompt(state: WatchtowerShellState): WatchtowerShellState {
+  return clearMovePrompt(state, { status: "Canceled" });
+}
+
+function clearMovePrompt(
+  state: WatchtowerShellState,
+  patch: Pick<WatchtowerShellState, "status">,
+): WatchtowerShellState {
+  return {
+    ...state,
+    ...patch,
+    moveMenuOpen: false,
+    pendingDestructiveMove: undefined,
+  };
+}
+
+function confirmPendingDestructiveMove(state: WatchtowerShellState): WatchtowerShellState {
+  if (state.pendingDestructiveMove === undefined) {
+    return { ...state, status: "No destructive action is pending." };
+  }
+
+  return {
+    ...state,
+    pendingDestructiveMove: undefined,
+    status: `Confirmed ${formatMoveMenuDestination(state.pendingDestructiveMove)}`,
   };
 }
 
@@ -303,6 +338,14 @@ export async function runWatchtowerCli(): Promise<void> {
       return true;
     }
 
+    if (action === "confirmDestructiveAction" && state.pendingDestructiveMove !== undefined) {
+      const destination = state.pendingDestructiveMove;
+      state = reduceShellState(state, action);
+      render();
+      void moveSelectedIssue(destination, { confirmed: true });
+      return true;
+    }
+
     if (isPreflightRetryAction(action) && !state.preflight.ok) {
       retrySetupPreflight();
       return true;
@@ -340,7 +383,7 @@ export async function runWatchtowerCli(): Promise<void> {
     const destination = MOVE_MENU_DESTINATIONS.get(inputSequence);
     if (destination === undefined) {
       if (inputSequence === "\x1b") {
-        state = { ...state, moveMenuOpen: false, status: "Canceled" };
+        state = cancelActivePrompt(state);
         render();
         return true;
       }
@@ -351,16 +394,24 @@ export async function runWatchtowerCli(): Promise<void> {
     return true;
   }
 
-  async function moveSelectedIssue(destination: TriageMoveDestination): Promise<void> {
+  async function moveSelectedIssue(
+    destination: TriageMoveDestination,
+    options: TriageMoveOptions = {},
+  ): Promise<void> {
     if (state.boardState === undefined || state.labelVocabulary === undefined) {
-      state = { ...state, moveMenuOpen: false, status: "No issue is selected." };
+      state = clearMovePrompt(state, { status: "No issue is selected." });
       render();
       return;
     }
 
     const boardState = state.boardState;
     const labelVocabulary = state.labelVocabulary;
-    state = { ...state, moveMenuOpen: false, status: "Moving selected issue" };
+    state = {
+      ...state,
+      moveMenuOpen: false,
+      pendingDestructiveMove: undefined,
+      status: formatMoveInProgressStatus(options),
+    };
     render();
 
     const gateway = new GhIssueGateway({ cwd: process.cwd() });
@@ -376,8 +427,12 @@ export async function runWatchtowerCli(): Promise<void> {
         labelVocabulary,
         createIssueMutationGateway(gateway),
         loadBoard,
+        options,
       ),
     );
+    if (isPendingDestructiveMove(destination, options, state.status)) {
+      state = { ...state, pendingDestructiveMove: destination };
+    }
     render();
   }
 
@@ -423,6 +478,12 @@ function renderBoardText(state: WatchtowerShellState) {
 
 function renderMoveMenuText(state: WatchtowerShellState) {
   if (!state.moveMenuOpen) {
+    if (state.pendingDestructiveMove !== undefined) {
+      return [
+        Text({ content: `${formatMoveMenuDestination(state.pendingDestructiveMove)} requires confirmation.` }),
+        Text({ content: "Enter confirm | Esc cancel" }),
+      ];
+    }
     return [];
   }
 
@@ -430,6 +491,35 @@ function renderMoveMenuText(state: WatchtowerShellState) {
     Text({ content: "Move selected issue:" }),
     Text({ content: MOVE_MENU_OPTIONS }),
   ];
+}
+
+function formatMoveMenuDestination(destination: TriageMoveDestination): string {
+  switch (destination) {
+    case "wontfix":
+      return "Close as wontfix";
+    default:
+      return destination;
+  }
+}
+
+function formatMoveInProgressStatus(options: TriageMoveOptions): string {
+  if (options.confirmed === true) {
+    return "Closing selected issue as wontfix";
+  }
+
+  return "Moving selected issue";
+}
+
+function isPendingDestructiveMove(
+  destination: TriageMoveDestination,
+  options: TriageMoveOptions,
+  status: string,
+): boolean {
+  return (
+    requiresTriageMoveConfirmation(destination) &&
+    options.confirmed !== true &&
+    status.includes(CONFIRMATION_REQUIRED_STATUS_FRAGMENT)
+  );
 }
 
 function formatErrorMessage(error: unknown): string {

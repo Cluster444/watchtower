@@ -97,6 +97,59 @@ describe("boardState", () => {
     expect(result.status).toContain("Earlier mutation steps may have succeeded");
     expect(result.board.triage.inbox.cards[0]?.title).toBe("Refreshed after failure");
   });
+
+  test("requires confirmation before Close as wontfix runs any mutation", async () => {
+    const calls: string[] = [];
+    const gateway = fakeMutationGateway(calls);
+
+    const result = await moveSelectedIssueToTriageDestination(
+      createBoardState(board()),
+      "wontfix",
+      vocabulary,
+      gateway,
+      async () => board({ firstInboxTitle: "Should not refresh" }),
+    );
+
+    expect(calls).toEqual([]);
+    expect(result.status).toBe("Close #101 as wontfix requires confirmation.");
+  });
+
+  test("confirmed Close as wontfix applies the label, closes the issue, and refreshes", async () => {
+    const calls: string[] = [];
+    const gateway = fakeMutationGateway(calls);
+
+    const result = await moveSelectedIssueToTriageDestination(
+      createBoardState(board()),
+      "wontfix",
+      vocabulary,
+      gateway,
+      async () => board({ firstInboxTitle: "Closed issue removed" }),
+      { confirmed: true },
+    );
+
+    expect(calls).toEqual(["add:101:wontfix", "close:101", "refresh"]);
+    expect(result.status).toBe("Close #101 as wontfix complete. Refreshed from GitHub.");
+    expect(result.board.triage.inbox.cards[0]?.title).toBe("Closed issue removed");
+  });
+
+  test("confirmed Close as wontfix stops on close failure and reports partial success risk", async () => {
+    const calls: string[] = [];
+    const gateway = fakeMutationGateway(calls, { failCloseIssue: true });
+
+    const result = await moveSelectedIssueToTriageDestination(
+      createBoardState(board()),
+      "wontfix",
+      vocabulary,
+      gateway,
+      async () => board({ firstInboxTitle: "Refreshed after close failure" }),
+      { confirmed: true },
+    );
+
+    expect(calls).toEqual(["add:101:wontfix", "close:101", "refresh"]);
+    expect(result.status).toContain("Failed to close #101");
+    expect(result.status).toContain("Earlier mutation steps may have succeeded");
+    expect(result.board.triage.inbox.cards[0]?.title).toBe("Refreshed after close failure");
+  });
 });
 
 const vocabulary: LabelVocabulary = {
@@ -147,7 +200,7 @@ function card(number: number, title: string, workflowLabels: string[], bodyPrevi
 
 function fakeMutationGateway(
   calls: string[],
-  options: { failAddLabel?: boolean } = {},
+  options: { failAddLabel?: boolean; failCloseIssue?: boolean } = {},
 ): IssueMutationGateway {
   return {
     async addLabel(issueNumber, label) {
@@ -158,6 +211,9 @@ function fakeMutationGateway(
     },
     async closeIssue(issueNumber) {
       calls.push(`close:${issueNumber}`);
+      if (options.failCloseIssue) {
+        throw new Error("GitHub refused close");
+      }
     },
     async refresh() {
       calls.push("refresh");

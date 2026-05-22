@@ -45,6 +45,24 @@ describe("planTriageMove", () => {
       { type: "removeLabel", issueNumber: 6, label: "ready-for-agent" },
     ]);
   });
+
+  test("planning Close as wontfix requires confirmation, applies wontfix, and closes the issue", () => {
+    const plan = planTriageMove({
+      card: card(["needs-info"]),
+      destination: "wontfix",
+      vocabulary,
+    });
+
+    expect(plan).toEqual({
+      description: "Close #6 as wontfix",
+      requiresConfirmation: true,
+      steps: [
+        { type: "removeLabel", issueNumber: 6, label: "needs-info" },
+        { type: "addLabel", issueNumber: 6, label: "wontfix" },
+        { type: "closeIssue", issueNumber: 6 },
+      ],
+    });
+  });
 });
 
 describe("executeMutationPlan", () => {
@@ -69,6 +87,7 @@ describe("executeMutationPlan", () => {
     const result = await executeMutationPlan(
       {
         description: "Move #6 to ready-for-agent",
+        requiresConfirmation: false,
         steps: [
           { type: "removeLabel", issueNumber: 6, label: "needs-info" },
           { type: "addLabel", issueNumber: 6, label: "ready-for-agent" },

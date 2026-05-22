@@ -47,6 +47,7 @@ export type BoardStateAction =
   | { type: "setSearchQuery"; query: string };
 
 export type BoardDataLoader = () => Promise<IssueBoard>;
+export type TriageMoveOptions = { confirmed?: boolean };
 
 const TRIAGE_LANE_KEYS: readonly TriageLaneKey[] = [
   "inbox",
@@ -145,10 +146,16 @@ export async function moveSelectedIssueToTriageDestination(
   vocabulary: LabelVocabulary,
   gateway: IssueMutationGateway,
   loadBoard: BoardDataLoader,
+  options: TriageMoveOptions = {},
 ): Promise<BoardState> {
   const card = getSelectedCard(state);
   if (card === undefined || state.selection.screen !== "triage") {
     return { ...state, status: "No triage issue is selected." };
+  }
+
+  const plan = planTriageMove({ card, destination, vocabulary });
+  if (plan.requiresConfirmation && options.confirmed !== true) {
+    return { ...state, status: `${plan.description} requires confirmation.` };
   }
 
   let refreshedBoard: IssueBoard | undefined;
@@ -160,10 +167,7 @@ export async function moveSelectedIssueToTriageDestination(
     },
   };
 
-  const result = await executeMutationPlan(
-    planTriageMove({ card, destination, vocabulary }),
-    gatewayWithBoardRefresh,
-  );
+  const result = await executeMutationPlan(plan, gatewayWithBoardRefresh);
   const nextState = refreshedBoard === undefined ? state : applyRefreshedBoard(state, refreshedBoard);
 
   return {

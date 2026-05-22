@@ -14,6 +14,7 @@ export type MutationStep =
 
 export type MutationPlan = {
   description: string;
+  requiresConfirmation: boolean;
   steps: MutationStep[];
 };
 
@@ -27,6 +28,10 @@ export type IssueMutationGateway = {
   closeIssue(issueNumber: number): Promise<void>;
   refresh(): Promise<void>;
 };
+
+export function requiresTriageMoveConfirmation(destination: TriageMoveDestination): boolean {
+  return destination === "wontfix";
+}
 
 export function planTriageMove(options: {
   card: IssueCard;
@@ -49,8 +54,16 @@ export function planTriageMove(options: {
     });
   }
 
+  if (destination === "wontfix") {
+    steps.push({
+      issueNumber: card.number,
+      type: "closeIssue",
+    });
+  }
+
   return {
     description: formatTriageMoveDescription(card.number, destination),
+    requiresConfirmation: requiresTriageMoveConfirmation(destination),
     steps,
   };
 }
@@ -80,11 +93,14 @@ export async function executeMutationPlan(
 }
 
 function formatTriageMoveDescription(issueNumber: number, destination: TriageMoveDestination): string {
-  if (destination === "inbox") {
-    return `Move #${issueNumber} to Inbox`;
+  switch (destination) {
+    case "inbox":
+      return `Move #${issueNumber} to Inbox`;
+    case "wontfix":
+      return `Close #${issueNumber} as wontfix`;
+    default:
+      return `Move #${issueNumber} to ${destination}`;
   }
-
-  return `Move #${issueNumber} to ${destination}`;
 }
 
 function canonicalLabelsOnCard(card: IssueCard, vocabulary: LabelVocabulary): string[] {
