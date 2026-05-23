@@ -21,10 +21,11 @@ export class GhIssueGateway {
   }
 
   async loadIssueSets(): Promise<IssueSets> {
+    const repository = await this.getRepositoryNameWithOwner();
     const [triageIssues, readyToRunIssues, closedRunIssues] = await Promise.all([
-      this.searchIssues("open", [`-label:${SANDCASTLE_LABEL}`]),
-      this.searchIssues("open", [`label:${SANDCASTLE_LABEL}`]),
-      this.searchIssues("closed", [`label:${SANDCASTLE_LABEL}`]),
+      this.searchIssues(repository, "open", [`-label:${SANDCASTLE_LABEL}`]),
+      this.searchIssues(repository, "open", [`label:${SANDCASTLE_LABEL}`]),
+      this.searchIssues(repository, "closed", [`label:${SANDCASTLE_LABEL}`]),
     ]);
 
     return { closedRunIssues, readyToRunIssues, triageIssues };
@@ -41,6 +42,22 @@ export class GhIssueGateway {
     return result.stdout.trim() || undefined;
   }
 
+  async getRepositoryNameWithOwner(): Promise<string> {
+    const result = await this.process.run("gh", ["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"], {
+      cwd: this.cwd,
+    });
+    if (result.exitCode !== 0) {
+      throw new Error(`gh repo view failed: ${result.stderr || result.stdout}`.trim());
+    }
+
+    const repository = result.stdout.trim();
+    if (repository.length === 0) {
+      throw new Error("gh repo view returned an empty repository name.");
+    }
+
+    return repository;
+  }
+
   async addLabel(issueNumber: number, label: string): Promise<void> {
     await this.runIssueMutation(["issue", "edit", String(issueNumber), "--add-label", label], "add label");
   }
@@ -53,8 +70,8 @@ export class GhIssueGateway {
     await this.runIssueMutation(["issue", "close", String(issueNumber)], "close issue");
   }
 
-  private async searchIssues(state: "open" | "closed", qualifiers: string[]): Promise<GitHubIssue[]> {
-    const result = await this.process.run("gh", createIssueSearchArgs(state, qualifiers), {
+  private async searchIssues(repository: string, state: "open" | "closed", qualifiers: string[]): Promise<GitHubIssue[]> {
+    const result = await this.process.run("gh", createIssueSearchArgs(repository, state, qualifiers), {
       cwd: this.cwd,
     });
     if (result.exitCode !== 0) {
@@ -74,10 +91,12 @@ export class GhIssueGateway {
   }
 }
 
-function createIssueSearchArgs(state: "open" | "closed", qualifiers: string[]): string[] {
+function createIssueSearchArgs(repository: string, state: "open" | "closed", qualifiers: string[]): string[] {
   return [
     "search",
     "issues",
+    "--repo",
+    repository,
     "--state",
     state,
     "--limit",

@@ -68,6 +68,10 @@ _Avoid_: "done queue", "completed tasks" unless completion was confirmed by Sand
 The board representation of a **GitHub issue**.
 _Avoid_: "ticket card", "task card"
 
+**Board cursor**:
+The user's current position on an **issue board**, identifying a focused lane and each lane's remembered **issue card** position.
+_Avoid_: "selected issue" when no **issue card** is focused
+
 **Board move**:
 Moving an **issue card** from one **issue board** lane to another.
 _Avoid_: "drag/drop" when the input method is not relevant.
@@ -125,6 +129,8 @@ _Avoid_: "run" when the meaning could be confused with Sandcastle's `run()` API.
 - The **run screen** contains a **ready-to-run lane** for open **eligible issues** and a **closed run lane** for closed **eligible issues**
 - The **issue board** contains canonical triage lanes plus **Inbox** and **Conflicted issue** lanes
 - An **issue card** represents one **GitHub issue** on the **issue board**
+- A **board cursor** may focus an empty **issue board** lane without selecting an **issue card**
+- A **board cursor** preserves each focused **issue board** lane's remembered **issue card** position
 - A **board move** changes canonical triage labels according to the destination lane while preserving non-triage labels
 - A **wontfix move** is presented as `Close as wontfix` and closes the **GitHub issue**
 - The **target repo** is the current git repository where **Watchtower** is running

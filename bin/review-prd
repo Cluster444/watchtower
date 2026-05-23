@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OPUS=claude-opus-4-7-max
+GPT=gpt-5.5-extra-high
+COMPOSER=composer-2.5
+
+usage() {
+  printf 'Usage: %s <prd.md>\n' "$(basename "$0")" >&2
+  printf '\nRuns cursor-agent headless across Opus, GPT, and Composer, then writes reviews to .review/<prd-name>/<run>/.\n' >&2
+}
+
+if [[ $# -ne 1 ]]; then
+  usage
+  exit 2
+fi
+
+if ! command -v cursor-agent >/dev/null 2>&1; then
+  printf 'error: cursor-agent was not found on PATH\n' >&2
+  exit 127
+fi
+
+PRD_PATH=$1
+
+if [[ ! -f "$PRD_PATH" ]]; then
+  printf 'error: PRD file does not exist: %s\n' "$PRD_PATH" >&2
+  exit 1
+fi
+
+PRD_ABS=$(realpath "$PRD_PATH")
+PRD_FILE=$(basename "$PRD_ABS")
+PRD_STEM=${PRD_FILE%.*}
+REVIEW_ROOT=".review/$PRD_STEM"
+MAX_RUN=10
+
+mkdir -p "$REVIEW_ROOT"
+
+NEXT_RUN=1
+
+for run_dir in "$REVIEW_ROOT"/*; do
+  [[ -d "$run_dir" ]] || continue
+
+  run=$(basename "$run_dir")
+
+  if [[ "$run" =~ ^[0-9]+$ ]] && (( run >= NEXT_RUN )); then
+    NEXT_RUN=$((run + 1))
+  fi
+done
+
+if (( NEXT_RUN > MAX_RUN )); then
+  printf 'error: review run limit reached for %s. Delete or archive old runs before creating run %s.\n' "$PRD_FILE" "$NEXT_RUN" >&2
+  exit 1
+fi
+
+REVIEW_DIR="$REVIEW_ROOT/$NEXT_RUN"
+mkdir "$REVIEW_DIR"
+
+PROMPT=$(cat <<EOF
+Review the PRD at $PRD_ABS.
+
+You are reviewing this PRD so another implementation agent can use it safely.
+Do not edit files. Return Markdown only.
+Start your response exactly with "# PRD Review". Do not include progress notes, status updates, or preamble before the review.
+Treat $PRD_ABS as the canonical PRD under review, even if similarly named PRD drafts exist elsewhere in the repository.
+You may inspect referenced docs or relevant source files to validate whether the PRD is actionable, but findings should be about the PRD's clarity and implementation-readiness.
+
+Assess whether the PRD is clear, concise, logical, internally consistent, and actionable.
+Focus on gaps, vagueness, contradictory requirements, missing acceptance criteria, missing edge cases, hidden assumptions, and places where an implementation agent could make the wrong choice.
+
+Use this exact structure:
+
+# PRD Review
+
+## Verdict
+One of: Ready / Needs minor clarification / Needs major revision.
+
+## Top Concerns
+List the highest-impact concerns first. If there are none, say "No major concerns."
+
+## Specific Findings
+For each finding, include severity, relevant PRD section or quote, why it matters, and a concrete suggested fix.
+
+## Agent Tripwires
+List any places an autonomous coding agent is likely to misunderstand or overbuild.
+
+## Suggested PRD Edits
+Provide concise wording changes or bullets the author could paste into the PRD.
+EOF
+)
+
+run_review() {
+  local label=$1
+  local model=$2
+  local output=$3
+  local log=$4
+  local timing=$5
+  local tmp
+  local start
+  local end
+  local elapsed
+
+  tmp=$(mktemp "$output.tmp.XXXXXX")
+  start=$(date +%s)
+
+  {
+    printf '# %s review for %s\n\n' "$label" "$PRD_FILE"
+    printf -- '- Model: `%s`\n' "$model"
+    printf -- '- PRD: `%s`\n\n' "$PRD_ABS"
+    cursor-agent --print --mode ask --trust --workspace "$PWD" --model "$model" "$PROMPT"
+  } >"$tmp" 2>"$log"
+
+  mv "$tmp" "$output"
+  end=$(date +%s)
+  elapsed=$((end - start))
+  printf '%s\n' "$elapsed" >"$timing"
+}
+
+declare -a LABELS=(opus gpt composer)
+declare -a MODELS=("$OPUS" "$GPT" "$COMPOSER")
+declare -a PIDS=()
+declare -a TIMINGS=()
+
+printf 'Writing PRD reviews to %s\n' "$REVIEW_DIR"
+
+for i in "${!LABELS[@]}"; do
+  label=${LABELS[$i]}
+  model=${MODELS[$i]}
+  output="$REVIEW_DIR/$label.md"
+  log="$REVIEW_DIR/$label.log"
+  timing="$REVIEW_DIR/$label.time"
+
+  printf 'Starting %s review with %s\n' "$label" "$model"
+  run_review "$label" "$model" "$output" "$log" "$timing" &
+  PIDS+=("$!")
+  TIMINGS+=("$timing")
+done
+
+FAILED=0
+
+for i in "${!PIDS[@]}"; do
+  pid=${PIDS[$i]}
+  label=${LABELS[$i]}
+  timing=${TIMINGS[$i]}
+
+  if wait "$pid"; then
+    elapsed=$(<"$timing")
+    printf 'Finished %s review in %ss: %s/%s.md\n' "$label" "$elapsed" "$REVIEW_DIR" "$label"
+  else
+    status=$?
+    FAILED=1
+    printf 'Failed %s review with status %s. See %s/%s.log\n' "$label" "$status" "$REVIEW_DIR" "$label" >&2
+  fi
+done
+
+if [[ $FAILED -ne 0 ]]; then
+  exit 1
+fi
+
+printf '\nTiming summary:\n'
+
+TOTAL_SECONDS=0
+
+for i in "${!LABELS[@]}"; do
+  label=${LABELS[$i]}
+  timing=${TIMINGS[$i]}
+  elapsed=$(<"$timing")
+  TOTAL_SECONDS=$((TOTAL_SECONDS + elapsed))
+  printf -- '- %s: %ss\n' "$label" "$elapsed"
+done
+
+printf -- '- total model time: %ss\n' "$TOTAL_SECONDS"
+printf 'All PRD reviews complete.\n'

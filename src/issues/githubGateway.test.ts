@@ -14,6 +14,7 @@ describe("GhIssueGateway", () => {
     await gateway.loadIssueSets();
 
     expect(calls).toEqual([
+      ["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
       expectedIssueSearchCall("open", "-label:Sandcastle"),
       expectedIssueSearchCall("open", "label:Sandcastle"),
       expectedIssueSearchCall("closed", "label:Sandcastle"),
@@ -85,6 +86,8 @@ function expectedIssueSearchCall(state: "open" | "closed", labelQualifier: strin
     "gh",
     "search",
     "issues",
+    "--repo",
+    "Cluster444/watchtower",
     "--state",
     state,
     "--limit",
@@ -106,6 +109,9 @@ function fakeProcess(calls: string[][], stdout = "[]"): ProcessRunner {
   return {
     async run(command, args) {
       calls.push([command, ...args]);
+      if (command === "gh" && args.join(" ") === "repo view --json nameWithOwner --jq .nameWithOwner") {
+        return { exitCode: 0, stdout: "Cluster444/watchtower\n", stderr: "" };
+      }
       return { exitCode: 0, stdout, stderr: "" };
     },
   };

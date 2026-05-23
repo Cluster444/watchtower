@@ -77,6 +77,8 @@ Pull requests are excluded. Archived, locked, private, and permission-restricted
 
 ## Screens
 
+Watchtower's terminal layout follows the durable UI guidance in [`docs/ui-design.md`](./ui-design.md). The active screen renders one kanban-style board using generic column and slot primitives, with navigation in the header and contextual commands/status in the bottom bars.
+
 ### Triage Screen
 
 The triage screen shows open GitHub issues that do not have the `Sandcastle` label.
@@ -122,7 +124,7 @@ Cards do not show assignees in phase one.
 
 ### Triage Moves
 
-Users can move cards between triage lanes with keyboard-first board controls.
+Users can move the board cursor between columns and slots with keyboard-first board controls. Issue mutations happen only through explicit commands, not through cursor movement.
 
 A triage move:
 
@@ -208,7 +210,7 @@ Phase one requires semantic actions for:
 - Retry preflight.
 - Exit.
 
-Exact keybindings do not need to be locked in the PRD.
+The core board navigation model uses Vim-style cursor movement: `h`/`l` move between columns and `j`/`k` move between slots within the current column. Other exact keybindings can evolve as the command bar guidance changes.
 
 ## Empty States
 
