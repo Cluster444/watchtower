@@ -37,12 +37,9 @@ export type BoardSelection = {
 
 export type BoardState = {
   board: IssueBoard;
-  visibleBoard: IssueBoard;
   screen: BoardScreen;
   cursor: BoardCursor;
   selection: BoardSelection;
-  searchFocused: boolean;
-  searchQuery: string;
   repositoryUrl?: string;
   status: string;
 };
@@ -52,10 +49,7 @@ export type BoardStateAction =
   | { type: "moveSelectionUp" }
   | { type: "moveSelectionDown" }
   | { type: "moveSelectionLeft" }
-  | { type: "moveSelectionRight" }
-  | { type: "focusSearch" }
-  | { type: "clearSearch" }
-  | { type: "setSearchQuery"; query: string };
+  | { type: "moveSelectionRight" };
 
 export type BoardDataLoader = () => Promise<IssueBoard>;
 export type MutationConfirmationOptions = { confirmed?: boolean };
@@ -73,7 +67,6 @@ const TRIAGE_LANE_KEYS: readonly TriageLaneKey[] = [
 ];
 
 const RUN_LANE_KEYS: readonly RunLaneKey[] = ["readyToRun", "closed"];
-const SEARCH_EMPTY_STATE = "No issues match the current search filter.";
 const SCREEN_STATUS_LABELS: Record<BoardScreen, string> = {
   triage: "Triage",
   run: "Run",
@@ -88,12 +81,9 @@ export function createBoardState(
     board,
     repositoryUrl: options.repositoryUrl,
     screen,
-    searchFocused: false,
-    searchQuery: "",
     cursor: createBoardCursor(slotCountsForScreen(board, screen)),
     selection: { screen, laneKey: firstLaneKeyForScreen(screen), cardIndex: 0 },
     status: options.status ?? "GitHub issues loaded",
-    visibleBoard: board,
   };
 
   return normalizeSelection(state);
@@ -105,7 +95,7 @@ export function reduceBoardState(state: BoardState, action: BoardStateAction): B
       return normalizeSelection({
         ...state,
         screen: action.screen,
-        cursor: createBoardCursor(slotCountsForScreen(state.visibleBoard, action.screen)),
+        cursor: createBoardCursor(slotCountsForScreen(state.board, action.screen)),
         selection: { screen: action.screen, laneKey: firstLaneKeyForScreen(action.screen), cardIndex: 0 },
         status: `${SCREEN_STATUS_LABELS[action.screen]} screen selected`,
       });
@@ -117,24 +107,6 @@ export function reduceBoardState(state: BoardState, action: BoardStateAction): B
       return moveSelection(state, 0, -1);
     case "moveSelectionRight":
       return moveSelection(state, 0, 1);
-    case "focusSearch":
-      return { ...state, searchFocused: true, status: "Search focused" };
-    case "clearSearch":
-      return normalizeSelection({
-        ...state,
-        searchFocused: false,
-        searchQuery: "",
-        status: "Search cleared",
-        visibleBoard: filterIssueBoard(state.board, ""),
-      });
-    case "setSearchQuery":
-      return normalizeSelection({
-        ...state,
-        searchFocused: true,
-        searchQuery: action.query,
-        status: action.query.trim().length > 0 ? `Search: ${action.query}` : "Search focused",
-        visibleBoard: filterIssueBoard(state.board, action.query),
-      });
   }
 }
 
@@ -145,7 +117,6 @@ export async function refreshBoardState(state: BoardState, loadBoard: BoardDataL
       ...state,
       board,
       status: "GitHub issues loaded",
-      visibleBoard: filterIssueBoard(board, state.searchQuery),
     });
   } catch (error) {
     return {
@@ -210,7 +181,6 @@ function applyRefreshedBoard(state: BoardState, board: IssueBoard): BoardState {
   return normalizeSelection({
     ...state,
     board,
-    visibleBoard: filterIssueBoard(board, state.searchQuery),
   });
 }
 
@@ -253,50 +223,9 @@ export function getSelectedIssueUrl(state: BoardState): string | undefined {
 }
 
 export function getSelectedCard(state: BoardState): IssueCard | undefined {
-  const lane = getLane(state.visibleBoard, state.screen, laneKeyForCursor(state));
-  const slotIndex = getSelectedSlotIndex(state.cursor, slotCountsForScreen(state.visibleBoard, state.screen));
+  const lane = getLane(state.board, state.screen, laneKeyForCursor(state));
+  const slotIndex = getSelectedSlotIndex(state.cursor, slotCountsForScreen(state.board, state.screen));
   return slotIndex === undefined ? undefined : lane?.cards[slotIndex];
-}
-
-export function filterIssueBoard(board: IssueBoard, query: string): IssueBoard {
-  const normalizedQuery = query.trim().toLowerCase();
-  if (normalizedQuery.length === 0) {
-    return board;
-  }
-
-  return {
-    triage: {
-      inbox: filterLane(board.triage.inbox, normalizedQuery),
-      "needs-triage": filterLane(board.triage["needs-triage"], normalizedQuery),
-      "needs-info": filterLane(board.triage["needs-info"], normalizedQuery),
-      "ready-for-agent": filterLane(board.triage["ready-for-agent"], normalizedQuery),
-      "ready-for-human": filterLane(board.triage["ready-for-human"], normalizedQuery),
-      wontfix: filterLane(board.triage.wontfix, normalizedQuery),
-      conflicted: filterLane(board.triage.conflicted, normalizedQuery),
-    },
-    run: {
-      readyToRun: filterLane(board.run.readyToRun, normalizedQuery),
-      closed: filterLane(board.run.closed, normalizedQuery),
-    },
-  };
-}
-
-function filterLane(lane: IssueLane, normalizedQuery: string): IssueLane {
-  const cards = lane.cards.filter((card) => cardMatchesQuery(card, normalizedQuery));
-  return {
-    ...lane,
-    cards,
-    emptyState: lane.cards.length > 0 && cards.length === 0 ? SEARCH_EMPTY_STATE : lane.emptyState,
-  };
-}
-
-function cardMatchesQuery(card: IssueCard, normalizedQuery: string): boolean {
-  return [
-    String(card.number),
-    card.title,
-    card.bodyPreview,
-    ...card.workflowLabels,
-  ].some((value) => value.toLowerCase().includes(normalizedQuery));
 }
 
 function moveSelection(state: BoardState, cardDelta: number, laneDelta: number): BoardState {
@@ -305,14 +234,14 @@ function moveSelection(state: BoardState, cardDelta: number, laneDelta: number):
 
   return normalizeSelection({
     ...state,
-    cursor: moveBoardCursor(state.cursor, slotCountsForScreen(state.visibleBoard, state.screen), direction),
+    cursor: moveBoardCursor(state.cursor, slotCountsForScreen(state.board, state.screen), direction),
     status: "Selection moved",
   });
 }
 
 function normalizeSelection(state: BoardState): BoardState {
   const laneKeys = laneKeysForScreen(state.screen);
-  const cursor = normalizeBoardCursor(state.cursor, slotCountsForScreen(state.visibleBoard, state.screen));
+  const cursor = normalizeBoardCursor(state.cursor, slotCountsForScreen(state.board, state.screen));
   const selectedLaneKey = laneKeys[cursor.columnIndex] ?? firstLaneKeyForScreen(state.screen);
   const selectedSlotIndex = cursor.slotIndexByColumn[cursor.columnIndex];
 

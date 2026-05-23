@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createElement } from "react";
 import { mapInputToAction, type WatchtowerAction } from "../input/actions";
+import { filterIssueKanban } from "../components/issues/issueKanbanFilter";
 import {
   createBoardState,
   getSelectedCard,
@@ -41,6 +42,8 @@ export type WatchtowerShellState = {
   pendingReadyToRunPromotion?: boolean;
   preflight: SetupPreflightResult;
   screen: WatchtowerScreen;
+  searchFocused: boolean;
+  searchQuery: string;
   status: string;
 };
 
@@ -82,7 +85,7 @@ export function reduceShellState(
     case "refresh":
       return { ...state, status: "Refresh requested" };
     case "focusSearch":
-      return applyBoardAction(state, { type: "focusSearch" }, { status: "Search focused" });
+      return { ...state, searchFocused: true, status: "Search focused" };
     case "openMoveMenu":
       return state.boardState === undefined || getSelectedCard(state.boardState) === undefined
         ? { ...state, status: "No issue is selected." }
@@ -96,18 +99,22 @@ export function reduceShellState(
     case "retryPreflight":
       return { ...state, status: "Retrying setup preflight" };
     case "clearSearch":
-      return applyBoardAction(state, { type: "clearSearch" }, { status: "Search cleared" });
+      return normalizeShellBoardCursor({ ...state, searchFocused: false, searchQuery: "", status: "Search cleared" });
     case "cancel":
       return cancelActivePrompt(state);
     case "confirmDestructiveAction":
       return confirmPendingAction(state);
     case "moveSelectionUp":
+      if (state.searchFocused) return state;
       return applyBoardAction(state, { type: "moveSelectionUp" }, { status: "Selection movement placeholder" });
     case "moveSelectionDown":
+      if (state.searchFocused) return state;
       return applyBoardAction(state, { type: "moveSelectionDown" }, { status: "Selection movement placeholder" });
     case "moveSelectionLeft":
+      if (state.searchFocused) return state;
       return applyBoardAction(state, { type: "moveSelectionLeft" }, { status: "Selection movement placeholder" });
     case "moveSelectionRight":
+      if (state.searchFocused) return state;
       return applyBoardAction(state, { type: "moveSelectionRight" }, { status: "Selection movement placeholder" });
     case "exit":
       return state;
@@ -129,14 +136,39 @@ function applyBoardAction(
 function syncShellWithBoardState(state: WatchtowerShellState, boardState: BoardState): WatchtowerShellState {
   return {
     ...state,
-    board: boardState.visibleBoard,
+    board: boardState.board,
     boardState,
     screen: boardState.screen,
     status: boardState.status,
   };
 }
 
+function normalizeShellBoardCursor(state: WatchtowerShellState): WatchtowerShellState {
+  if (state.boardState === undefined) {
+    return state;
+  }
+
+  const filtered = filterIssueKanban(
+    state.boardState.board,
+    state.screen,
+    state.boardState.cursor,
+    state.searchQuery,
+  );
+
+  return {
+    ...state,
+    boardState: {
+      ...state.boardState,
+      cursor: filtered.cursor,
+    },
+  };
+}
+
 function cancelActivePrompt(state: WatchtowerShellState): WatchtowerShellState {
+  if (state.searchFocused) {
+    return normalizeShellBoardCursor({ ...state, searchFocused: false, searchQuery: "", status: "Canceled" });
+  }
+
   return clearPendingActionPrompt(state, { status: "Canceled" });
 }
 
@@ -191,6 +223,8 @@ export async function runWatchtowerCli(): Promise<void> {
     preflight: await runSetupPreflight(),
     moveMenuOpen: false,
     screen: "triage",
+    searchFocused: false,
+    searchQuery: "",
     status: "CLI shell ready",
   };
   let isRendererDestroyed = false;
@@ -275,14 +309,12 @@ export async function runWatchtowerCli(): Promise<void> {
     }
 
     const action = mapInputToAction({ type: "terminal", sequence: inputSequence });
-    if (action === undefined && state.boardState?.searchFocused === true && isSearchTextInput(inputSequence)) {
-      state = syncShellWithBoardState(
-        state,
-        reduceBoardState(state.boardState, {
-          type: "setSearchQuery",
-          query: `${state.boardState.searchQuery}${inputSequence}`,
-        }),
-      );
+    if (action === undefined && state.searchFocused === true && isSearchTextInput(inputSequence)) {
+      state = normalizeShellBoardCursor({
+        ...state,
+        searchQuery: `${state.searchQuery}${inputSequence}`,
+        status: `Search: ${state.searchQuery}${inputSequence}`,
+      });
       render();
       return true;
     }

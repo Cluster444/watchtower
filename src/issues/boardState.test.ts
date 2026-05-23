@@ -14,22 +14,6 @@ import type { IssueMutationGateway } from "./triageActions";
 import type { LabelVocabulary } from "../setup/labelVocabulary";
 
 describe("boardState", () => {
-  test("filters loaded cards by number, title, workflow labels, and body preview", () => {
-    const state = createBoardState(board());
-
-    expect(reduceBoardState(state, { type: "setSearchQuery", query: "202" }).visibleBoard.triage.inbox.cards.map((card) => card.number)).toEqual([202]);
-    expect(reduceBoardState(state, { type: "setSearchQuery", query: "oauth" }).visibleBoard.triage["ready-for-agent"].cards.map((card) => card.number)).toEqual([303]);
-    expect(reduceBoardState(state, { type: "setSearchQuery", query: "Sandcastle" }).visibleBoard.run.readyToRun.cards.map((card) => card.number)).toEqual([404]);
-    expect(reduceBoardState(state, { type: "setSearchQuery", query: "token" }).visibleBoard.triage["ready-for-agent"].cards.map((card) => card.number)).toEqual([303]);
-  });
-
-  test("distinguishes empty GitHub lanes from search-hidden lanes", () => {
-    const state = reduceBoardState(createBoardState(board()), { type: "setSearchQuery", query: "missing" });
-
-    expect(state.visibleBoard.triage.inbox.emptyState).toBe("No issues match the current search filter.");
-    expect(state.visibleBoard.triage["needs-info"].emptyState).toBe("No needs info issues.");
-  });
-
   test("moves selection through cards and lanes on the active screen", () => {
     let state = createBoardState(board());
 

@@ -1,6 +1,7 @@
 import { formatPreflightFailureLines } from "../setup/preflightScreen";
 import { Board } from "../components/kanban/Board";
 import { issueBoardToKanbanColumns } from "../components/issues/issueKanban";
+import { filterIssueKanban } from "../components/issues/issueKanbanFilter";
 import type { BoardState } from "../issues/boardState";
 import type { TriageMoveDestination } from "../issues/triageActions";
 import type { WatchtowerShellState, WatchtowerScreen } from "./shell";
@@ -56,7 +57,11 @@ function Header({ state }: { state: WatchtowerShellState }) {
 }
 
 function BoardArea({ state }: { state: WatchtowerShellState }) {
-  const board = state.boardState?.visibleBoard ?? state.board;
+  const filtered =
+    state.boardState === undefined
+      ? undefined
+      : filterIssueKanban(state.boardState.board, state.screen, state.boardState.cursor, state.searchQuery);
+  const board = filtered?.board ?? state.board;
 
   return (
     <box flexDirection="column" gap={0} id="watchtower-board">
@@ -65,7 +70,7 @@ function BoardArea({ state }: { state: WatchtowerShellState }) {
       ) : (
         <Board
           columns={issueBoardToKanbanColumns(board, state.screen)}
-          cursor={state.boardState?.cursor ?? { columnIndex: 0, slotIndexByColumn: {} }}
+          cursor={filtered?.cursor ?? state.boardState?.cursor ?? { columnIndex: 0, slotIndexByColumn: {} }}
         />
       )}
     </box>
@@ -86,8 +91,8 @@ function StatusBar({ state }: { state: WatchtowerShellState }) {
     <box flexDirection="column" id="watchtower-status-bar">
       <text fg="#F9E2AF">{state.status}</text>
       <text fg="#A6ADC8">Selected: {renderSelectionSummary(state.boardState)}</text>
-      <text fg={state.boardState?.searchFocused ? "#A6E3A1" : "#A6ADC8"}>
-        Search: {state.boardState?.searchQuery ?? ""}
+      <text fg={state.searchFocused ? "#A6E3A1" : "#A6ADC8"}>
+        Search: {state.searchQuery}
       </text>
     </box>
   );
@@ -127,6 +132,10 @@ function renderPrimaryCommandLine(state: WatchtowerShellState): string {
 
   if (state.pendingDestructiveMove !== undefined) {
     return `${formatMoveMenuDestination(state.pendingDestructiveMove)} requires confirmation.`;
+  }
+
+  if (state.searchFocused) {
+    return `Search: ${state.searchQuery} | type to filter | Backspace clear | Esc cancel`;
   }
 
   if (state.boardState === undefined) {

@@ -8,6 +8,8 @@ describe("reduceShellState", () => {
     const state: WatchtowerShellState = {
       preflight: { ok: true },
       moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "",
       screen: "triage",
       status: "CLI shell ready",
     };
@@ -15,12 +17,16 @@ describe("reduceShellState", () => {
     expect(reduceShellState(state, "switchToRun")).toEqual({
       preflight: { ok: true },
       moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "",
       screen: "run",
       status: "Run screen selected",
     });
     expect(reduceShellState(state, "switchToTriage")).toEqual({
       preflight: { ok: true },
       moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "",
       screen: "triage",
       status: "Triage screen selected",
     });
@@ -30,6 +36,8 @@ describe("reduceShellState", () => {
     const state: WatchtowerShellState = {
       preflight: { ok: true },
       moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "",
       screen: "run",
       status: "Run screen selected",
     };
@@ -37,12 +45,16 @@ describe("reduceShellState", () => {
     expect(reduceShellState(state, "refresh")).toEqual({
       preflight: { ok: true },
       moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "",
       screen: "run",
       status: "Refresh requested",
     });
     expect(reduceShellState(state, "moveSelectionDown")).toEqual({
       preflight: { ok: true },
       moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "",
       screen: "run",
       status: "Selection movement placeholder",
     });
@@ -52,6 +64,8 @@ describe("reduceShellState", () => {
     const state: WatchtowerShellState = {
       preflight: { ok: true },
       moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "",
       screen: "triage",
       status: "CLI shell ready",
     };
@@ -73,6 +87,8 @@ describe("reduceShellState", () => {
         ],
       },
       moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "",
       screen: "triage",
       status: "Setup blocked",
     };
@@ -89,6 +105,8 @@ describe("reduceShellState", () => {
     const state: WatchtowerShellState = {
       boardState,
       moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "",
       preflight: { ok: true },
       screen: "triage",
       status: "GitHub issues loaded",
@@ -102,6 +120,8 @@ describe("reduceShellState", () => {
     expect(reduceShellState({ ...state, moveMenuOpen: true }, "cancel")).toEqual({
       ...state,
       moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "",
       status: "Canceled",
     });
   });
@@ -111,6 +131,8 @@ describe("reduceShellState", () => {
     const state: WatchtowerShellState = {
       boardState,
       moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "",
       preflight: { ok: true },
       screen: "triage",
       status: "Selection moved",
@@ -122,10 +144,28 @@ describe("reduceShellState", () => {
     });
   });
 
+  test("does not move the board cursor while search is focused", () => {
+    const boardState = createBoardState(board());
+    const state: WatchtowerShellState = {
+      boardState,
+      moveMenuOpen: false,
+      searchFocused: true,
+      searchQuery: "issue",
+      preflight: { ok: true },
+      screen: "triage",
+      status: "Search: issue",
+    };
+
+    expect(reduceShellState(state, "moveSelectionDown")).toBe(state);
+    expect(reduceShellState(state, "moveSelectionRight")).toBe(state);
+  });
+
   test("confirmation actions clear a pending Close as wontfix prompt", () => {
     const state: WatchtowerShellState = {
       boardState: {} as WatchtowerShellState["boardState"],
       moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "",
       pendingDestructiveMove: "wontfix",
       preflight: { ok: true },
       screen: "triage",
@@ -148,6 +188,8 @@ describe("reduceShellState", () => {
     const state: WatchtowerShellState = {
       boardState: {} as WatchtowerShellState["boardState"],
       moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "",
       pendingReadyToRunPromotion: true,
       preflight: { ok: true },
       screen: "triage",
