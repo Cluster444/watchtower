@@ -1,5 +1,6 @@
 import { formatPreflightFailureLines } from "../setup/preflightScreen";
-import { renderIssueBoardLines } from "../issues/issueBoard";
+import { Board } from "../components/kanban/Board";
+import { issueBoardToKanbanColumns } from "../components/issues/issueKanban";
 import type { BoardState } from "../issues/boardState";
 import type { TriageMoveDestination } from "../issues/triageActions";
 import type { WatchtowerShellState, WatchtowerScreen } from "./shell";
@@ -62,13 +63,10 @@ function BoardArea({ state }: { state: WatchtowerShellState }) {
       {board === undefined ? (
         <text>Issue board has not loaded yet.</text>
       ) : (
-        <>
-          {renderIssueBoardLines(board, state.screen).map((line, index) => (
-            <text fg={line.startsWith("#") ? "#CDD6F4" : "#A6ADC8"} key={`${index}:${line}`}>
-              {line}
-            </text>
-          ))}
-        </>
+        <Board
+          columns={issueBoardToKanbanColumns(board, state.screen)}
+          cursor={state.boardState?.cursor ?? { columnIndex: 0, slotIndexByColumn: {} }}
+        />
       )}
     </box>
   );
@@ -168,7 +166,12 @@ function renderSelectionSummary(boardState: BoardState | undefined): string {
     return "none";
   }
 
-  return `${boardState.selection.laneKey} card ${boardState.selection.cardIndex + 1}`;
+  const selectedSlotIndex = boardState.cursor.slotIndexByColumn[boardState.cursor.columnIndex];
+  if (selectedSlotIndex === undefined) {
+    return `${boardState.selection.laneKey} empty`;
+  }
+
+  return `${boardState.selection.laneKey} card ${selectedSlotIndex + 1}`;
 }
 
 function getPreflightLineColor(index: number, lineCount: number): string | undefined {

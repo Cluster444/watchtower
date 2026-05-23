@@ -37,6 +37,12 @@ describe("boardState", () => {
     expect(state.selection).toEqual({ screen: "triage", laneKey: "inbox", cardIndex: 1 });
 
     state = reduceBoardState(state, { type: "moveSelectionRight" });
+    expect(state.selection).toEqual({ screen: "triage", laneKey: "needs-triage", cardIndex: 0 });
+    expect(state.cursor.slotIndexByColumn[state.cursor.columnIndex]).toBeUndefined();
+
+    state = reduceBoardState(state, { type: "moveSelectionRight" });
+    state = reduceBoardState(state, { type: "moveSelectionRight" });
+    state = reduceBoardState(state, { type: "moveSelectionRight" });
     expect(state.selection).toEqual({ screen: "triage", laneKey: "ready-for-agent", cardIndex: 0 });
 
     state = reduceBoardState(state, { type: "switchScreen", screen: "run" });
@@ -84,6 +90,9 @@ describe("boardState", () => {
     const calls: string[] = [];
     const gateway = fakeMutationGateway(calls, { failAddLabel: true });
     let state = createBoardState(board());
+    state = reduceBoardState(state, { type: "moveSelectionRight" });
+    state = reduceBoardState(state, { type: "moveSelectionRight" });
+    state = reduceBoardState(state, { type: "moveSelectionRight" });
     state = reduceBoardState(state, { type: "moveSelectionRight" });
 
     const result = await moveSelectedIssueToTriageDestination(
@@ -157,9 +166,14 @@ describe("boardState", () => {
     const calls: string[] = [];
     const gateway = fakeMutationGateway(calls);
     const state = reduceBoardState(createBoardState(board()), { type: "moveSelectionRight" });
+    const readyForAgentState = [
+      { type: "moveSelectionRight" as const },
+      { type: "moveSelectionRight" as const },
+      { type: "moveSelectionRight" as const },
+    ].reduce(reduceBoardState, state);
 
     const result = await markSelectedIssueReadyToRun(
-      state,
+      readyForAgentState,
       vocabulary,
       gateway,
       async () => board({ readyToRunTitle: "Promoted from GitHub" }),
@@ -189,8 +203,9 @@ describe("boardState", () => {
     const calls: string[] = [];
     const gateway = fakeMutationGateway(calls);
     let state = createBoardState(board());
-    state = reduceBoardState(state, { type: "moveSelectionRight" });
-    state = reduceBoardState(state, { type: "moveSelectionRight" });
+    for (let index = 0; index < 6; index += 1) {
+      state = reduceBoardState(state, { type: "moveSelectionRight" });
+    }
 
     const result = await markSelectedIssueReadyToRun(
       state,
