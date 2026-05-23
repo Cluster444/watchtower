@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   createBoardState,
+  getFocusedLaneKey,
   getSelectedIssueUrl,
   markSelectedIssueReadyToRun,
   moveSelectedIssueToTriageDestination,
@@ -14,23 +15,30 @@ import type { IssueMutationGateway } from "../../issues/triageActions";
 import type { LabelVocabulary } from "../../setup/labelVocabulary";
 
 describe("boardState", () => {
-  test("moves selection through cards and lanes on the active screen", () => {
+  test("moves the cursor through cards and lanes on the active screen", () => {
     let state = createBoardState(board());
 
     state = reduceBoardState(state, { type: "moveSelectionDown" });
-    expect(state.selection).toEqual({ screen: "triage", laneKey: "inbox", cardIndex: 1 });
+    expect(state.screen).toBe("triage");
+    expect(getFocusedLaneKey(state)).toBe("inbox");
+    expect(state.cursor.slotIndexByColumn[state.cursor.columnIndex]).toBe(1);
 
     state = reduceBoardState(state, { type: "moveSelectionRight" });
-    expect(state.selection).toEqual({ screen: "triage", laneKey: "needs-triage", cardIndex: 0 });
+    expect(state.screen).toBe("triage");
+    expect(getFocusedLaneKey(state)).toBe("needs-triage");
     expect(state.cursor.slotIndexByColumn[state.cursor.columnIndex]).toBeUndefined();
 
     state = reduceBoardState(state, { type: "moveSelectionRight" });
     state = reduceBoardState(state, { type: "moveSelectionRight" });
     state = reduceBoardState(state, { type: "moveSelectionRight" });
-    expect(state.selection).toEqual({ screen: "triage", laneKey: "ready-for-agent", cardIndex: 0 });
+    expect(state.screen).toBe("triage");
+    expect(getFocusedLaneKey(state)).toBe("ready-for-agent");
+    expect(state.cursor.slotIndexByColumn[state.cursor.columnIndex]).toBe(0);
 
     state = reduceBoardState(state, { type: "switchScreen", screen: "run" });
-    expect(state.selection).toEqual({ screen: "run", laneKey: "readyToRun", cardIndex: 0 });
+    expect(state.screen).toBe("run");
+    expect(getFocusedLaneKey(state)).toBe("readyToRun");
+    expect(state.cursor.slotIndexByColumn[state.cursor.columnIndex]).toBe(0);
   });
 
   test("coordinates manual refresh with a fake loader", async () => {

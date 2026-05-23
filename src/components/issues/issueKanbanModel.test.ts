@@ -1,11 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { issueBoardToKanbanColumns } from "./issueKanban";
+import { issueBoardToKanbanColumnModels } from "./issueKanbanModel";
 import type { IssueBoard } from "../../issues/issueBoard";
 
-describe("issueBoardToKanbanColumns", () => {
+describe("issueBoardToKanbanColumnModels", () => {
   test("adapts triage lanes to kanban columns in active board order", () => {
-    const columns = issueBoardToKanbanColumns(board(), "triage");
+    const columns = issueBoardToKanbanColumnModels(board(), "triage");
 
+    expect(columns.map((column) => column.key)).toEqual([
+      "inbox",
+      "needs-triage",
+      "needs-info",
+      "ready-for-human",
+      "ready-for-agent",
+      "wontfix",
+      "conflicted",
+    ]);
     expect(columns.map((column) => column.title)).toEqual([
       "Inbox",
       "Needs triage",
@@ -15,15 +24,24 @@ describe("issueBoardToKanbanColumns", () => {
       "Wontfix",
       "Conflicted",
     ]);
-    expect(columns.map((column) => column.slots.length)).toEqual([1, 0, 0, 1, 1, 0, 0]);
+    expect(columns.map((column) => column.slots.map((slot) => slot.key))).toEqual([
+      ["101"],
+      [],
+      [],
+      ["202"],
+      ["303"],
+      [],
+      [],
+    ]);
     expect(columns[1]?.emptyState).toBe("No needs triage issues.");
   });
 
   test("adapts run lanes without pulling in legacy row rendering", () => {
-    const columns = issueBoardToKanbanColumns(board(), "run");
+    const columns = issueBoardToKanbanColumnModels(board(), "run");
 
+    expect(columns.map((column) => column.key)).toEqual(["readyToRun", "closed"]);
     expect(columns.map((column) => column.title)).toEqual(["Ready to run", "Closed"]);
-    expect(columns.map((column) => column.slots.length)).toEqual([1, 1]);
+    expect(columns.map((column) => column.slots.map((slot) => slot.card.number))).toEqual([[404], [505]]);
   });
 });
 

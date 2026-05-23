@@ -1,5 +1,6 @@
 import { filterIssueKanban } from "../components/issues/issueKanbanFilter";
 import {
+  getFocusedLaneKey,
   getSelectedCard,
   normalizeBoardState,
   type BoardLaneKey,
@@ -44,7 +45,11 @@ export function getActiveIssueActionBoardState(state: WatchtowerShellState): Boa
     return undefined;
   }
 
-  const canonicalLane = getLane(state.boardState.board, activeBoardState.screen, activeBoardState.selection.laneKey);
+  const canonicalLane = getLane(
+    state.boardState.board,
+    activeBoardState.screen,
+    getFocusedLaneKey(activeBoardState),
+  );
   const canonicalCardIndex = canonicalLane?.cards.findIndex((card) => card.number === selectedCard.number) ?? -1;
   if (canonicalCardIndex < 0) {
     return undefined;

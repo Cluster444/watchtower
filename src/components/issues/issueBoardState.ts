@@ -29,17 +29,10 @@ export type TriageLaneKey =
 export type RunLaneKey = "readyToRun" | "closed";
 export type BoardLaneKey = TriageLaneKey | RunLaneKey;
 
-export type BoardSelection = {
-  screen: BoardScreen;
-  laneKey: BoardLaneKey;
-  cardIndex: number;
-};
-
 export type BoardState = {
   board: IssueBoard;
   screen: BoardScreen;
   cursor: BoardCursor;
-  selection: BoardSelection;
   repositoryUrl?: string;
   status: string;
 };
@@ -82,7 +75,6 @@ export function createBoardState(
     repositoryUrl: options.repositoryUrl,
     screen,
     cursor: createBoardCursor(slotCountsForScreen(board, screen)),
-    selection: { screen, laneKey: firstLaneKeyForScreen(screen), cardIndex: 0 },
     status: options.status ?? "GitHub issues loaded",
   };
 
@@ -96,7 +88,6 @@ export function reduceBoardState(state: BoardState, action: BoardStateAction): B
         ...state,
         screen: action.screen,
         cursor: createBoardCursor(slotCountsForScreen(state.board, action.screen)),
-        selection: { screen: action.screen, laneKey: firstLaneKeyForScreen(action.screen), cardIndex: 0 },
         status: `${SCREEN_STATUS_LABELS[action.screen]} screen selected`,
       });
     case "moveSelectionUp":
@@ -135,7 +126,7 @@ export async function moveSelectedIssueToTriageDestination(
   options: TriageMoveOptions = {},
 ): Promise<BoardState> {
   const card = getSelectedCard(state);
-  if (card === undefined || state.selection.screen !== "triage") {
+  if (card === undefined || state.screen !== "triage") {
     return { ...state, status: "No triage issue is selected." };
   }
 
@@ -151,7 +142,7 @@ export async function markSelectedIssueReadyToRun(
   options: ReadyToRunOptions = {},
 ): Promise<BoardState> {
   const card = getSelectedCard(state);
-  if (card === undefined || state.selection.screen !== "triage") {
+  if (card === undefined || state.screen !== "triage") {
     return { ...state, status: "No triage issue is selected." };
   }
 
@@ -165,11 +156,11 @@ export async function unmarkSelectedIssueReadyToRun(
   loadBoard: BoardDataLoader,
 ): Promise<BoardState> {
   const card = getSelectedCard(state);
-  if (card === undefined || state.selection.screen !== "run") {
+  if (card === undefined || state.screen !== "run") {
     return { ...state, status: "No run issue is selected." };
   }
 
-  if (state.selection.laneKey === "closed") {
+  if (getFocusedLaneKey(state) === "closed") {
     return { ...state, status: "Closed run-screen issues cannot be unmarked in phase one." };
   }
 
@@ -223,7 +214,7 @@ export function getSelectedIssueUrl(state: BoardState): string | undefined {
 }
 
 export function getSelectedCard(state: BoardState): IssueCard | undefined {
-  const lane = getLane(state.board, state.screen, laneKeyForCursor(state));
+  const lane = getLane(state.board, state.screen, getFocusedLaneKey(state));
   const slotIndex = getSelectedSlotIndex(state.cursor, slotCountsForScreen(state.board, state.screen));
   return slotIndex === undefined ? undefined : lane?.cards[slotIndex];
 }
@@ -240,23 +231,15 @@ function moveSelection(state: BoardState, cardDelta: number, laneDelta: number):
 }
 
 export function normalizeBoardState(state: BoardState): BoardState {
-  const laneKeys = laneKeysForScreen(state.screen);
   const cursor = normalizeBoardCursor(state.cursor, slotCountsForScreen(state.board, state.screen));
-  const selectedLaneKey = laneKeys[cursor.columnIndex] ?? firstLaneKeyForScreen(state.screen);
-  const selectedSlotIndex = cursor.slotIndexByColumn[cursor.columnIndex];
 
   return {
     ...state,
     cursor,
-    selection: {
-      screen: state.screen,
-      laneKey: selectedLaneKey,
-      cardIndex: selectedSlotIndex ?? 0,
-    },
   };
 }
 
-function laneKeyForCursor(state: BoardState): BoardLaneKey {
+export function getFocusedLaneKey(state: BoardState): BoardLaneKey {
   return laneKeysForScreen(state.screen)[state.cursor.columnIndex] ?? firstLaneKeyForScreen(state.screen);
 }
 

@@ -1,4 +1,4 @@
-import { getSelectedCard, type BoardState } from "../components/issues/issueBoardState";
+import { getFocusedLaneKey, getSelectedCard, type BoardState } from "../components/issues/issueBoardState";
 import type { TriageMoveDestination } from "../issues/triageActions";
 import type { WatchtowerShellState, WatchtowerScreen } from "./shell";
 import { getActiveIssueBoardState } from "./activeIssueBoard";
@@ -73,7 +73,7 @@ function createCommandLines(state: WatchtowerShellState, activeBoardState: Board
 
 function selectedIssueCommandsForContext(state: WatchtowerShellState, activeBoardState: BoardState): string {
   if (state.screen === "run") {
-    return activeBoardState.selection.laneKey === "closed" ? "o open" : "u unmark ready | o open";
+    return getFocusedLaneKey(activeBoardState) === "closed" ? "o open" : "u unmark ready | o open";
   }
 
   return "m move | p mark ready | o open";
@@ -86,7 +86,7 @@ function renderSelectionSummary(boardState: BoardState | undefined): string {
 
   const card = getSelectedCard(boardState);
   if (card === undefined) {
-    return `${boardState.selection.laneKey}: no selected issue`;
+    return `${getFocusedLaneKey(boardState)}: no selected issue`;
   }
 
   return `#${card.number} ${card.title}`;

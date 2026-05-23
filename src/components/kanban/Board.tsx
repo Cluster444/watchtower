@@ -2,9 +2,15 @@ import type { ReactNode } from "react";
 import type { BoardCursor } from "./cursor";
 
 export type KanbanColumn = {
+  key: string;
   title: string;
   emptyState: string;
-  slots: ReactNode[];
+  slots: KanbanSlot[];
+};
+
+export type KanbanSlot = {
+  key: string;
+  content: ReactNode;
 };
 
 export function Board({ columns, cursor }: { columns: readonly KanbanColumn[]; cursor: BoardCursor }) {
@@ -14,7 +20,7 @@ export function Board({ columns, cursor }: { columns: readonly KanbanColumn[]; c
         <Column
           column={column}
           focused={columnIndex === cursor.columnIndex}
-          key={`${columnIndex}:${column.title}`}
+          key={column.key}
           selectedSlotIndex={cursor.slotIndexByColumn[columnIndex]}
         />
       ))}
@@ -48,8 +54,8 @@ export function Column({
         <text fg="#6C7086">{column.emptyState}</text>
       ) : (
         column.slots.map((slot, slotIndex) => (
-          <Slot focused={focused && selectedSlotIndex === slotIndex} key={slotIndex}>
-            {slot}
+          <Slot focused={focused && selectedSlotIndex === slotIndex} key={slot.key}>
+            {slot.content}
           </Slot>
         ))
       )}

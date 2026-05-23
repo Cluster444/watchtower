@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { reduceShellSearchTextInput, reduceShellState, type WatchtowerShellState } from "./shell";
 import { getActiveIssueActionBoardState, getActiveIssueBoardState } from "./activeIssueBoard";
-import { createBoardState, getSelectedCard, reduceBoardState } from "../components/issues/issueBoardState";
+import {
+  createBoardState,
+  getFocusedLaneKey,
+  getSelectedCard,
+  reduceBoardState,
+} from "../components/issues/issueBoardState";
 import type { IssueBoard } from "../issues/issueBoard";
 
 describe("reduceShellState", () => {
@@ -159,7 +164,9 @@ describe("reduceShellState", () => {
 
     const active = getActiveIssueBoardState(state);
 
-    expect(active?.selection).toEqual({ screen: "triage", laneKey: "inbox", cardIndex: 0 });
+    expect(active?.screen).toBe("triage");
+    expect(active === undefined ? undefined : getFocusedLaneKey(active)).toBe("inbox");
+    expect(active?.cursor.slotIndexByColumn[active.cursor.columnIndex]).toBe(0);
     expect(active?.board.triage.inbox.cards.map((card) => card.number)).toEqual([202]);
   });
 

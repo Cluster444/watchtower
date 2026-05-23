@@ -31,7 +31,6 @@ describe("WatchtowerShell", () => {
         board: emptyColumnBoard(),
         cursor: { columnIndex: 1, slotIndexByColumn: { 0: 0, 1: undefined } },
         screen: "triage",
-        selection: { screen: "triage", laneKey: "needs-triage", cardIndex: 0 },
         status: "Selection moved",
       } as unknown as WatchtowerShellState["boardState"],
       moveMenuOpen: false,

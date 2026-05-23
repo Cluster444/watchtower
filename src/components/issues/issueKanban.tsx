@@ -1,25 +1,17 @@
 import type { IssueBoard, IssueCard } from "../../issues/issueBoard";
 import type { BoardScreen } from "./issueBoardState";
 import type { KanbanColumn } from "../kanban/Board";
+import { issueBoardToKanbanColumnModels } from "./issueKanbanModel";
 
 export function issueBoardToKanbanColumns(board: IssueBoard, screen: BoardScreen): KanbanColumn[] {
-  const lanes =
-    screen === "triage"
-      ? [
-          board.triage.inbox,
-          board.triage["needs-triage"],
-          board.triage["needs-info"],
-          board.triage["ready-for-human"],
-          board.triage["ready-for-agent"],
-          board.triage.wontfix,
-          board.triage.conflicted,
-        ]
-      : [board.run.readyToRun, board.run.closed];
-
-  return lanes.map((lane) => ({
-    emptyState: lane.emptyState,
-    slots: lane.cards.map((card) => <IssueCardView card={card} />),
-    title: lane.title,
+  return issueBoardToKanbanColumnModels(board, screen).map((column) => ({
+    emptyState: column.emptyState,
+    key: column.key,
+    slots: column.slots.map((slot) => ({
+      content: <IssueCardView card={slot.card} />,
+      key: slot.key,
+    })),
+    title: column.title,
   }));
 }
 
