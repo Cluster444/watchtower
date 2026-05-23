@@ -8,10 +8,10 @@ import {
   refreshBoardState,
   unmarkSelectedIssueReadyToRun,
   type BoardDataLoader,
-} from "./boardState";
-import type { IssueBoard } from "./issueBoard";
-import type { IssueMutationGateway } from "./triageActions";
-import type { LabelVocabulary } from "../setup/labelVocabulary";
+} from "./issueBoardState";
+import type { IssueBoard } from "../../issues/issueBoard";
+import type { IssueMutationGateway } from "../../issues/triageActions";
+import type { LabelVocabulary } from "../../setup/labelVocabulary";
 
 describe("boardState", () => {
   test("moves selection through cards and lanes on the active screen", () => {

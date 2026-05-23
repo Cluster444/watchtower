@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   classifyIssueBoard,
   formatBodyPreview,
-  renderIssueBoardLines,
   type GitHubIssue,
 } from "./issueBoard";
 import type { LabelVocabulary } from "../setup/labelVocabulary";
@@ -61,58 +60,6 @@ describe("classifyIssueBoard", () => {
     expect(board.run.readyToRun.cards[0]?.workflowLabels).toEqual(["Sandcastle", "ready-for-agent"]);
     expect(board.triage.inbox.cards[0]).not.toHaveProperty("assignees");
     expect(board.triage.inbox.cards[0]?.updatedAge).toBe("2d ago");
-  });
-});
-
-describe("renderIssueBoardLines", () => {
-  test("renders triage lanes in screen order with blank separators", () => {
-    const board = classifyIssueBoard(
-      {
-        closedRunIssues: [],
-        readyToRunIssues: [],
-        triageIssues: [
-          issue({ number: 2, labels: ["ready-for-agent"], updatedAt: "2026-05-22T10:00:00Z" }),
-        ],
-      },
-      vocabulary,
-      new Date("2026-05-22T12:00:00Z"),
-    );
-
-    expect(renderIssueBoardLines(board, "triage")).toEqual([
-      "Inbox (0)",
-      "No triage issues in Inbox.",
-      "",
-      "Needs triage (0)",
-      "No issues need triage.",
-      "",
-      "Needs info (0)",
-      "No issues need info.",
-      "",
-      "Ready for agent (1)",
-      "#2 [ready-for-agent] Issue 2 (2h ago) - Body",
-      "",
-      "Ready for human (0)",
-      "No issues are ready for a human.",
-      "",
-      "Wontfix (0)",
-      "No open issues are marked wontfix.",
-      "",
-      "Conflicted (0)",
-      "No conflicted issues.",
-    ]);
-  });
-
-  test("renders an explicit screen empty state when there are no triage issues", () => {
-    const board = classifyIssueBoard(
-      {
-        closedRunIssues: [],
-        readyToRunIssues: [],
-        triageIssues: [],
-      },
-      vocabulary,
-    );
-
-    expect(renderIssueBoardLines(board, "triage")).toEqual(["Triage (0)", "No triage issues."]);
   });
 });
 

@@ -1,4 +1,4 @@
-import { getSelectedCard, type BoardState } from "../issues/boardState";
+import { getSelectedCard, type BoardState } from "../components/issues/issueBoardState";
 import type { TriageMoveDestination } from "../issues/triageActions";
 import type { WatchtowerShellState, WatchtowerScreen } from "./shell";
 import { getActiveIssueBoardState } from "./activeIssueBoard";

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { reduceShellSearchTextInput, reduceShellState, type WatchtowerShellState } from "./shell";
 import { getActiveIssueActionBoardState, getActiveIssueBoardState } from "./activeIssueBoard";
-import { createBoardState, getSelectedCard, reduceBoardState } from "../issues/boardState";
+import { createBoardState, getSelectedCard, reduceBoardState } from "../components/issues/issueBoardState";
 import type { IssueBoard } from "../issues/issueBoard";
 
 describe("reduceShellState", () => {

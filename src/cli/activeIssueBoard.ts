@@ -5,7 +5,7 @@ import {
   type BoardLaneKey,
   type BoardScreen,
   type BoardState,
-} from "../issues/boardState";
+} from "../components/issues/issueBoardState";
 import type { IssueBoard, IssueLane } from "../issues/issueBoard";
 import type { WatchtowerShellState } from "./shell";
 

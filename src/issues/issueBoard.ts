@@ -108,31 +108,6 @@ export function formatBodyPreview(
   return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}...`;
 }
 
-export function renderIssueBoardLines(board: IssueBoard, screen: "triage" | "run"): string[] {
-  if (screen === "run") {
-    return renderScreenLaneLines([board.run.readyToRun, board.run.closed]);
-  }
-
-  const triageLanes = getTriageLanes(board);
-  if (areLanesEmpty(triageLanes)) {
-    return ["Triage (0)", "No triage issues."];
-  }
-
-  return renderScreenLaneLines(triageLanes);
-}
-
-function getTriageLanes(board: IssueBoard): IssueLane[] {
-  return [
-    board.triage.inbox,
-    ...CANONICAL_TRIAGE_ROLES.map((role) => board.triage[role]),
-    board.triage.conflicted,
-  ];
-}
-
-function areLanesEmpty(lanes: readonly IssueLane[]): boolean {
-  return lanes.every((lane) => lane.cards.length === 0);
-}
-
 function createEmptyIssueBoard(): IssueBoard {
   return {
     triage: {
@@ -255,27 +230,4 @@ function formatUpdatedAge(updatedAt: Date, now: Date): string {
   }
 
   return `${Math.floor(months / 12)}y ago`;
-}
-
-function renderScreenLaneLines(lanes: readonly IssueLane[]): string[] {
-  return lanes.flatMap((lane, index) =>
-    index === lanes.length - 1 ? renderLaneLines(lane) : [...renderLaneLines(lane), ""],
-  );
-}
-
-function renderLaneLines(lane: IssueLane): string[] {
-  if (lane.cards.length === 0) {
-    return [`${lane.title} (0)`, lane.emptyState];
-  }
-
-  return [
-    `${lane.title} (${lane.cards.length})`,
-    ...lane.cards.map((card) => renderIssueCardLine(card)),
-  ];
-}
-
-function renderIssueCardLine(card: IssueCard): string {
-  const labels = card.workflowLabels.length > 0 ? ` [${card.workflowLabels.join(", ")}]` : "";
-  const preview = card.bodyPreview.length > 0 ? ` - ${card.bodyPreview}` : "";
-  return `#${card.number}${labels} ${card.title} (${card.updatedAge})${preview}`;
 }

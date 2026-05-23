@@ -1,12 +1,12 @@
-import type { IssueBoard, IssueCard, IssueLane } from "./issueBoard";
-import type { LabelVocabulary } from "../setup/labelVocabulary";
+import type { IssueBoard, IssueCard, IssueLane } from "../../issues/issueBoard";
+import type { LabelVocabulary } from "../../setup/labelVocabulary";
 import {
   createBoardCursor,
   getSelectedSlotIndex,
   moveBoardCursor,
   normalizeBoardCursor,
   type BoardCursor,
-} from "../components/kanban/cursor";
+} from "../kanban/cursor";
 import {
   executeMutationPlan,
   planReadyToRunDemotion,
@@ -15,7 +15,7 @@ import {
   type IssueMutationGateway,
   type MutationPlan,
   type TriageMoveDestination,
-} from "./triageActions";
+} from "../../issues/triageActions";
 
 export type BoardScreen = "triage" | "run";
 export type TriageLaneKey =
@@ -286,8 +286,4 @@ function isRunLaneKey(laneKey: BoardLaneKey): laneKey is RunLaneKey {
 
 function isTriageLaneKey(laneKey: BoardLaneKey): laneKey is TriageLaneKey {
   return !isRunLaneKey(laneKey);
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
 }

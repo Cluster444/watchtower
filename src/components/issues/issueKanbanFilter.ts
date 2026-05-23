@@ -1,6 +1,6 @@
 import { normalizeBoardCursor, type BoardCursor } from "../kanban/cursor";
 import type { IssueBoard, IssueCard, IssueLane } from "../../issues/issueBoard";
-import type { BoardScreen } from "../../issues/boardState";
+import type { BoardScreen } from "./issueBoardState";
 
 export type FilteredIssueKanban = {
   board: IssueBoard;

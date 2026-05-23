@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createBoardState, reduceBoardState } from "../issues/boardState";
+import { createBoardState, reduceBoardState } from "../components/issues/issueBoardState";
 import type { IssueBoard } from "../issues/issueBoard";
 import { createShellBarModel } from "./shellBars";
 import type { WatchtowerShellState } from "./shell";

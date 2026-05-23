@@ -19,7 +19,7 @@ import {
   type BoardStateAction,
   type ReadyToRunOptions,
   type TriageMoveOptions,
-} from "../issues/boardState";
+} from "../components/issues/issueBoardState";
 import { GhIssueGateway } from "../issues/githubGateway";
 import { openIssueInBrowser } from "../issues/openIssue";
 import { classifyIssueBoard, type IssueBoard } from "../issues/issueBoard";

@@ -1,5 +1,5 @@
 import type { IssueBoard, IssueCard } from "../../issues/issueBoard";
-import type { BoardScreen } from "../../issues/boardState";
+import type { BoardScreen } from "./issueBoardState";
 import type { KanbanColumn } from "../kanban/Board";
 
 export function issueBoardToKanbanColumns(board: IssueBoard, screen: BoardScreen): KanbanColumn[] {
