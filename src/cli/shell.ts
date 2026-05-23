@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createElement } from "react";
 import { mapInputToAction, type WatchtowerAction } from "../input/actions";
 import { filterIssueKanban } from "../components/issues/issueKanbanFilter";
+import { getActiveIssueBoardState } from "./activeIssueBoard";
 import {
   createBoardState,
   getSelectedCard,
@@ -87,7 +88,7 @@ export function reduceShellState(
     case "focusSearch":
       return { ...state, searchFocused: true, status: "Search focused" };
     case "openMoveMenu":
-      return state.boardState === undefined || getSelectedCard(state.boardState) === undefined
+      return getSelectedCardFromShell(state) === undefined
         ? { ...state, status: "No issue is selected." }
         : { ...state, moveMenuOpen: true, status: "Move menu opened" };
     case "markReadyToRun":
@@ -425,6 +426,7 @@ export async function runWatchtowerCli(): Promise<void> {
     }
 
     const boardState = state.boardState;
+    const selectedBoardState = getActiveIssueBoardState(state);
     const labelVocabulary = state.labelVocabulary;
     state = {
       ...state,
@@ -437,7 +439,7 @@ export async function runWatchtowerCli(): Promise<void> {
     state = syncShellWithBoardState(
       state,
       await moveSelectedIssueToTriageDestination(
-        boardState,
+        selectedBoardState ?? boardState,
         destination,
         labelVocabulary,
         createShellIssueMutationGateway(),
@@ -459,6 +461,7 @@ export async function runWatchtowerCli(): Promise<void> {
     }
 
     const boardState = state.boardState;
+    const selectedBoardState = getActiveIssueBoardState(state);
     const labelVocabulary = state.labelVocabulary;
     state = {
       ...state,
@@ -471,7 +474,7 @@ export async function runWatchtowerCli(): Promise<void> {
     state = syncShellWithBoardState(
       state,
       await markSelectedIssueReadyToRun(
-        boardState,
+        selectedBoardState ?? boardState,
         labelVocabulary,
         createShellIssueMutationGateway(),
         loadIssueBoardForMutation,
@@ -492,6 +495,7 @@ export async function runWatchtowerCli(): Promise<void> {
     }
 
     const boardState = state.boardState;
+    const selectedBoardState = getActiveIssueBoardState(state);
     state = {
       ...state,
       moveMenuOpen: false,
@@ -503,7 +507,7 @@ export async function runWatchtowerCli(): Promise<void> {
     state = syncShellWithBoardState(
       state,
       await unmarkSelectedIssueReadyToRun(
-        boardState,
+        selectedBoardState ?? boardState,
         createShellIssueMutationGateway(),
         loadIssueBoardForMutation,
       ),
@@ -577,11 +581,17 @@ function formatErrorMessage(error: unknown): string {
 }
 
 function getSelectedIssueUrlFromShell(state: WatchtowerShellState): string | undefined {
-  if (state.boardState === undefined) {
+  const activeBoardState = getActiveIssueBoardState(state);
+  if (activeBoardState === undefined) {
     return undefined;
   }
 
-  return getSelectedIssueUrl(state.boardState);
+  return getSelectedIssueUrl(activeBoardState);
+}
+
+function getSelectedCardFromShell(state: WatchtowerShellState) {
+  const activeBoardState = getActiveIssueBoardState(state);
+  return activeBoardState === undefined ? undefined : getSelectedCard(activeBoardState);
 }
 
 async function getRepositoryUrl(cwd: string): Promise<string | undefined> {

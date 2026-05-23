@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { reduceShellSearchTextInput, reduceShellState, type WatchtowerShellState } from "./shell";
+import { getActiveIssueBoardState } from "./activeIssueBoard";
 import { createBoardState, reduceBoardState } from "../issues/boardState";
 import type { IssueBoard } from "../issues/issueBoard";
 
@@ -144,6 +145,24 @@ describe("reduceShellState", () => {
     });
   });
 
+  test("derives selected issue actions from the filtered cursor-selected card", () => {
+    const boardState = createBoardState(board());
+    const state: WatchtowerShellState = {
+      boardState,
+      moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "202",
+      preflight: { ok: true },
+      screen: "triage",
+      status: "Search: 202",
+    };
+
+    const active = getActiveIssueBoardState(state);
+
+    expect(active?.selection).toEqual({ screen: "triage", laneKey: "inbox", cardIndex: 0 });
+    expect(active?.board.triage.inbox.cards.map((card) => card.number)).toEqual([202]);
+  });
+
   test("does not move the board cursor while search is focused", () => {
     const boardState = createBoardState(board());
     const state: WatchtowerShellState = {
@@ -270,7 +289,7 @@ describe("reduceShellState", () => {
 function board(): IssueBoard {
   return {
     triage: {
-      inbox: lane("Inbox", [card(101)]),
+      inbox: lane("Inbox", [card(101), card(202)]),
       "needs-triage": lane("Needs triage", []),
       "needs-info": lane("Needs info", []),
       "ready-for-human": lane("Ready for human", []),

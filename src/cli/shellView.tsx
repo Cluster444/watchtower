@@ -1,7 +1,7 @@
 import { formatPreflightFailureLines } from "../setup/preflightScreen";
 import { Board } from "../components/kanban/Board";
 import { issueBoardToKanbanColumns } from "../components/issues/issueKanban";
-import { filterIssueKanban } from "../components/issues/issueKanbanFilter";
+import { getActiveIssueBoardState } from "./activeIssueBoard";
 import { createShellBarModel } from "./shellBars";
 import type { WatchtowerShellState } from "./shell";
 import type { SetupFailure } from "../setup/preflight";
@@ -46,11 +46,8 @@ function Header({ state }: { state: WatchtowerShellState }) {
 }
 
 function BoardArea({ state }: { state: WatchtowerShellState }) {
-  const filtered =
-    state.boardState === undefined
-      ? undefined
-      : filterIssueKanban(state.boardState.board, state.screen, state.boardState.cursor, state.searchQuery);
-  const board = filtered?.board ?? state.board;
+  const activeBoardState = getActiveIssueBoardState(state);
+  const board = activeBoardState?.board ?? state.board;
 
   return (
     <box flexDirection="column" gap={0} id="watchtower-board">
@@ -59,7 +56,7 @@ function BoardArea({ state }: { state: WatchtowerShellState }) {
       ) : (
         <Board
           columns={issueBoardToKanbanColumns(board, state.screen)}
-          cursor={filtered?.cursor ?? state.boardState?.cursor ?? { columnIndex: 0, slotIndexByColumn: {} }}
+          cursor={activeBoardState?.cursor ?? state.boardState?.cursor ?? { columnIndex: 0, slotIndexByColumn: {} }}
         />
       )}
     </box>

@@ -1,6 +1,7 @@
 import { getSelectedCard, type BoardState } from "../issues/boardState";
 import type { TriageMoveDestination } from "../issues/triageActions";
 import type { WatchtowerShellState, WatchtowerScreen } from "./shell";
+import { getActiveIssueBoardState } from "./activeIssueBoard";
 
 export type ShellBarModel = {
   commandLines: string[];
@@ -24,19 +25,20 @@ const MOVE_MENU_OPTIONS = [
 ].join(" | ");
 
 export function createShellBarModel(state: WatchtowerShellState): ShellBarModel {
+  const activeBoardState = getActiveIssueBoardState(state);
   return {
-    commandLines: createCommandLines(state),
+    commandLines: createCommandLines(state, activeBoardState),
     headerLines: ["Watchtower", "1/t Triage | 2/r Run", `Screen: ${SCREEN_LABELS[state.screen]}`],
     statusLines: [
       `Screen: ${SCREEN_LABELS[state.screen]}`,
-      `Selected: ${renderSelectionSummary(state.boardState)}`,
+      `Selected: ${renderSelectionSummary(activeBoardState)}`,
       `Status: ${state.status}`,
       `Search: ${state.searchQuery}`,
     ],
   };
 }
 
-function createCommandLines(state: WatchtowerShellState): string[] {
+function createCommandLines(state: WatchtowerShellState, activeBoardState: BoardState | undefined): string[] {
   if (state.moveMenuOpen) {
     return ["Move selected issue:", MOVE_MENU_OPTIONS];
   }
@@ -57,21 +59,21 @@ function createCommandLines(state: WatchtowerShellState): string[] {
   }
 
   const persistentCommands = "1/t triage | 2/r run | / search | Ctrl+R refresh | q exit";
-  if (state.boardState === undefined) {
+  if (activeBoardState === undefined) {
     return [persistentCommands];
   }
 
-  if (!hasSelectedIssue(state.boardState)) {
+  if (!hasSelectedIssue(activeBoardState)) {
     return [`h/l or arrows column | ${persistentCommands}`];
   }
 
-  const selectedIssueCommands = selectedIssueCommandsForContext(state);
+  const selectedIssueCommands = selectedIssueCommandsForContext(state, activeBoardState);
   return [`j/k or arrows slot | h/l or arrows column | ${selectedIssueCommands} | ${persistentCommands}`];
 }
 
-function selectedIssueCommandsForContext(state: WatchtowerShellState): string {
+function selectedIssueCommandsForContext(state: WatchtowerShellState, activeBoardState: BoardState): string {
   if (state.screen === "run") {
-    return state.boardState?.selection.laneKey === "closed" ? "o open" : "u unmark ready | o open";
+    return activeBoardState.selection.laneKey === "closed" ? "o open" : "u unmark ready | o open";
   }
 
   return "m move | p mark ready | o open";

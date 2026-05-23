@@ -86,13 +86,13 @@ export function createBoardState(
     status: options.status ?? "GitHub issues loaded",
   };
 
-  return normalizeSelection(state);
+  return normalizeBoardState(state);
 }
 
 export function reduceBoardState(state: BoardState, action: BoardStateAction): BoardState {
   switch (action.type) {
     case "switchScreen":
-      return normalizeSelection({
+      return normalizeBoardState({
         ...state,
         screen: action.screen,
         cursor: createBoardCursor(slotCountsForScreen(state.board, action.screen)),
@@ -113,7 +113,7 @@ export function reduceBoardState(state: BoardState, action: BoardStateAction): B
 export async function refreshBoardState(state: BoardState, loadBoard: BoardDataLoader): Promise<BoardState> {
   try {
     const board = await loadBoard();
-    return normalizeSelection({
+    return normalizeBoardState({
       ...state,
       board,
       status: "GitHub issues loaded",
@@ -178,7 +178,7 @@ export async function unmarkSelectedIssueReadyToRun(
 }
 
 function applyRefreshedBoard(state: BoardState, board: IssueBoard): BoardState {
-  return normalizeSelection({
+  return normalizeBoardState({
     ...state,
     board,
   });
@@ -232,14 +232,14 @@ function moveSelection(state: BoardState, cardDelta: number, laneDelta: number):
   const direction =
     laneDelta < 0 ? "left" : laneDelta > 0 ? "right" : cardDelta < 0 ? "up" : "down";
 
-  return normalizeSelection({
+  return normalizeBoardState({
     ...state,
     cursor: moveBoardCursor(state.cursor, slotCountsForScreen(state.board, state.screen), direction),
     status: "Selection moved",
   });
 }
 
-function normalizeSelection(state: BoardState): BoardState {
+export function normalizeBoardState(state: BoardState): BoardState {
   const laneKeys = laneKeysForScreen(state.screen);
   const cursor = normalizeBoardCursor(state.cursor, slotCountsForScreen(state.board, state.screen));
   const selectedLaneKey = laneKeys[cursor.columnIndex] ?? firstLaneKeyForScreen(state.screen);

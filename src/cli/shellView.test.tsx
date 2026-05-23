@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { WatchtowerShell } from "./shellView";
 import type { WatchtowerShellState } from "./shell";
+import type { IssueBoard } from "../issues/issueBoard";
 
 describe("WatchtowerShell", () => {
   test("renders the active shell frame in layout order without unloaded mutation commands", () => {
@@ -27,8 +28,11 @@ describe("WatchtowerShell", () => {
   test("renders empty-column commands without selected-issue actions", () => {
     const state: WatchtowerShellState = {
       boardState: {
+        board: emptyColumnBoard(),
         cursor: { columnIndex: 1, slotIndexByColumn: { 0: 0, 1: undefined } },
+        screen: "triage",
         selection: { screen: "triage", laneKey: "needs-triage", cardIndex: 0 },
+        status: "Selection moved",
       } as unknown as WatchtowerShellState["boardState"],
       moveMenuOpen: false,
       searchFocused: false,
@@ -95,4 +99,37 @@ function renderElement(node: unknown): unknown {
   }
 
   return node;
+}
+
+function emptyColumnBoard(): IssueBoard {
+  return {
+    triage: {
+      inbox: lane("Inbox", [card(101)]),
+      "needs-triage": lane("Needs triage", []),
+      "needs-info": lane("Needs info", []),
+      "ready-for-human": lane("Ready for human", []),
+      "ready-for-agent": lane("Ready for agent", []),
+      wontfix: lane("Wontfix", []),
+      conflicted: lane("Conflicted", []),
+    },
+    run: {
+      readyToRun: lane("Ready to run", []),
+      closed: lane("Closed", []),
+    },
+  };
+}
+
+function lane(title: string, cards: IssueBoard["triage"]["inbox"]["cards"]) {
+  return { title, cards, emptyState: `No ${title.toLowerCase()} issues.` };
+}
+
+function card(number: number) {
+  return {
+    bodyPreview: "plain preview",
+    number,
+    title: `Issue ${number}`,
+    updatedAge: "1h ago",
+    updatedAt: "2026-05-22T12:00:00Z",
+    workflowLabels: [],
+  };
 }
