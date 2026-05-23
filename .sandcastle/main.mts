@@ -123,6 +123,14 @@ const requireCleanWorktree = () => {
   }
 };
 
+const branchHasCommits = (branch: string) => {
+  try {
+    return Number(git(["rev-list", "--count", `${sourceBranch}..${branch}`])) > 0;
+  } catch {
+    return false;
+  }
+};
+
 const requirePreflight = () => {
   requireEnv("GH_TOKEN");
   requireCommand("git", "Install git and retry.");
@@ -265,14 +273,14 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         });
 
         // Only review if the implementer produced commits
-        if (implement.commits.length > 0) {
+        if (implement.commits.length > 0 || branchHasCommits(issue.branch)) {
           const review = await sandbox.run({
             name: "reviewer",
             maxIterations: 1,
             agent: sandcastle.codex("gpt-5.5", { effort: "xhigh" }),
             promptFile: "./.sandcastle/review-prompt.md",
             promptArgs: {
-              SOURCE_BRANCH: sourceBranch,
+              REVIEW_BASE_BRANCH: sourceBranch,
               BRANCH: issue.branch,
             },
           });
@@ -308,7 +316,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     .filter(
       (entry) =>
         entry.outcome.status === "fulfilled" &&
-        entry.outcome.value.commits.length > 0,
+        (entry.outcome.value.commits.length > 0 || branchHasCommits(entry.issue.branch)),
     )
     .map((entry) => entry.issue);
 
@@ -322,9 +330,9 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   }
 
   if (completedBranches.length === 0) {
-    // All agents ran but none made commits — nothing to merge this cycle.
-    console.log("No commits produced. Nothing to merge.");
-    continue;
+    // Continuing would usually re-plan the same open issue and loop forever.
+    console.log("No branches with commits. Nothing to merge. Exiting.");
+    break;
   }
 
   // -------------------------------------------------------------------------

@@ -6,15 +6,15 @@ Review the work on the current branch, which should be `{{BRANCH}}`, against the
 
 ## Branch diff
 
-!`git diff {{SOURCE_BRANCH}}...{{BRANCH}}`
+!`git diff {{REVIEW_BASE_BRANCH}}...{{BRANCH}}`
 
 ## Commits on this branch
 
-!`git log {{SOURCE_BRANCH}}..{{BRANCH}} --oneline`
+!`git log {{REVIEW_BASE_BRANCH}}..{{BRANCH}} --oneline`
 
 # REVIEW PROCESS
 
-1. **Confirm branch/base**: Verify the current branch is `{{BRANCH}}`. Use `{{SOURCE_BRANCH}}` as the review base; do not assume the default branch is named `main` or `master`.
+1. **Confirm branch/base**: Verify the current branch is `{{BRANCH}}`. Use `{{REVIEW_BASE_BRANCH}}` as the review base; do not assume the default branch is named `main` or `master`.
 
 2. **Understand the issue**: Read the issue and any linked parent issue or PRD. Review the branch against that requested outcome.
 
