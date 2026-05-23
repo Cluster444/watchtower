@@ -308,16 +308,14 @@ export async function runWatchtowerCli(): Promise<void> {
       return true;
     }
 
-    const action = mapInputToAction({ type: "terminal", sequence: inputSequence });
-    if (action === undefined && state.searchFocused === true && isSearchTextInput(inputSequence)) {
-      state = normalizeShellBoardCursor({
-        ...state,
-        searchQuery: `${state.searchQuery}${inputSequence}`,
-        status: `Search: ${state.searchQuery}${inputSequence}`,
-      });
+    const searchTextState = reduceShellSearchTextInput(state, inputSequence);
+    if (searchTextState !== undefined) {
+      state = searchTextState;
       render();
       return true;
     }
+
+    const action = mapInputToAction({ type: "terminal", sequence: inputSequence });
 
     if (action === undefined) {
       return false;
@@ -584,6 +582,22 @@ async function getRepositoryUrl(cwd: string): Promise<string | undefined> {
 
 function isSearchTextInput(inputSequence: string): boolean {
   return inputSequence.length === 1 && inputSequence >= " " && inputSequence !== "\x7f";
+}
+
+export function reduceShellSearchTextInput(
+  state: WatchtowerShellState,
+  inputSequence: string,
+): WatchtowerShellState | undefined {
+  if (!state.searchFocused || !isSearchTextInput(inputSequence)) {
+    return undefined;
+  }
+
+  const searchQuery = `${state.searchQuery}${inputSequence}`;
+  return normalizeShellBoardCursor({
+    ...state,
+    searchQuery,
+    status: `Search: ${searchQuery}`,
+  });
 }
 
 function createIssueMutationGateway(gateway: GhIssueGateway): IssueMutationGateway {

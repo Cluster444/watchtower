@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { reduceShellState, type WatchtowerShellState } from "./shell";
+import { reduceShellSearchTextInput, reduceShellState, type WatchtowerShellState } from "./shell";
 import { createBoardState, reduceBoardState } from "../issues/boardState";
 import type { IssueBoard } from "../issues/issueBoard";
 
@@ -158,6 +158,44 @@ describe("reduceShellState", () => {
 
     expect(reduceShellState(state, "moveSelectionDown")).toBe(state);
     expect(reduceShellState(state, "moveSelectionRight")).toBe(state);
+  });
+
+  test("routes printable command keys into search text while search is focused", () => {
+    const boardState = createBoardState(board());
+    const state: WatchtowerShellState = {
+      boardState,
+      moveMenuOpen: false,
+      searchFocused: true,
+      searchQuery: "",
+      preflight: { ok: true },
+      screen: "triage",
+      status: "Search focused",
+    };
+
+    const next = reduceShellSearchTextInput(state, "j");
+
+    expect(next).toEqual({
+      ...state,
+      boardState: {
+        ...boardState,
+        cursor: {
+          columnIndex: 0,
+          slotIndexByColumn: {
+            0: undefined,
+            1: undefined,
+            2: undefined,
+            3: undefined,
+            4: undefined,
+            5: undefined,
+            6: undefined,
+          },
+        },
+      },
+      searchQuery: "j",
+      status: "Search: j",
+    });
+    expect(reduceShellSearchTextInput(state, "\x1b")).toBeUndefined();
+    expect(reduceShellSearchTextInput(state, "\x7f")).toBeUndefined();
   });
 
   test("confirmation actions clear a pending Close as wontfix prompt", () => {
