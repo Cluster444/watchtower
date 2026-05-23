@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { reduceShellSearchTextInput, reduceShellState, type WatchtowerShellState } from "./shell";
-import { getActiveIssueBoardState } from "./activeIssueBoard";
-import { createBoardState, reduceBoardState } from "../issues/boardState";
+import { getActiveIssueActionBoardState, getActiveIssueBoardState } from "./activeIssueBoard";
+import { createBoardState, getSelectedCard, reduceBoardState } from "../issues/boardState";
 import type { IssueBoard } from "../issues/issueBoard";
 
 describe("reduceShellState", () => {
@@ -161,6 +161,40 @@ describe("reduceShellState", () => {
 
     expect(active?.selection).toEqual({ screen: "triage", laneKey: "inbox", cardIndex: 0 });
     expect(active?.board.triage.inbox.cards.map((card) => card.number)).toEqual([202]);
+  });
+
+  test("maps filtered cursor-selected issue actions back to the canonical board", () => {
+    const boardState = createBoardState(board());
+    const state: WatchtowerShellState = {
+      boardState,
+      moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "202",
+      preflight: { ok: true },
+      screen: "triage",
+      status: "Search: 202",
+    };
+
+    const actionBoardState = getActiveIssueActionBoardState(state);
+
+    expect(actionBoardState?.board.triage.inbox.cards.map((card) => card.number)).toEqual([101, 202]);
+    expect(actionBoardState?.cursor.slotIndexByColumn[0]).toBe(1);
+    expect(actionBoardState === undefined ? undefined : getSelectedCard(actionBoardState)?.number).toBe(202);
+  });
+
+  test("does not derive an issue action board when the filtered focused column is empty", () => {
+    const boardState = createBoardState(board());
+    const state: WatchtowerShellState = {
+      boardState,
+      moveMenuOpen: false,
+      searchFocused: false,
+      searchQuery: "missing",
+      preflight: { ok: true },
+      screen: "triage",
+      status: "Search: missing",
+    };
+
+    expect(getActiveIssueActionBoardState(state)).toBeUndefined();
   });
 
   test("does not move the board cursor while search is focused", () => {

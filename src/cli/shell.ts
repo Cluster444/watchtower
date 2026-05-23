@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createElement } from "react";
 import { mapInputToAction, type WatchtowerAction } from "../input/actions";
 import { filterIssueKanban } from "../components/issues/issueKanbanFilter";
-import { getActiveIssueBoardState } from "./activeIssueBoard";
+import { getActiveIssueActionBoardState, getActiveIssueBoardState } from "./activeIssueBoard";
 import {
   createBoardState,
   getSelectedCard,
@@ -425,8 +425,13 @@ export async function runWatchtowerCli(): Promise<void> {
       return;
     }
 
-    const boardState = state.boardState;
-    const selectedBoardState = getActiveIssueBoardState(state);
+    const selectedBoardState = getActiveIssueActionBoardState(state);
+    if (selectedBoardState === undefined) {
+      state = clearPendingActionPrompt(state, { status: "No issue is selected." });
+      render();
+      return;
+    }
+
     const labelVocabulary = state.labelVocabulary;
     state = {
       ...state,
@@ -439,7 +444,7 @@ export async function runWatchtowerCli(): Promise<void> {
     state = syncShellWithBoardState(
       state,
       await moveSelectedIssueToTriageDestination(
-        selectedBoardState ?? boardState,
+        selectedBoardState,
         destination,
         labelVocabulary,
         createShellIssueMutationGateway(),
@@ -460,8 +465,13 @@ export async function runWatchtowerCli(): Promise<void> {
       return;
     }
 
-    const boardState = state.boardState;
-    const selectedBoardState = getActiveIssueBoardState(state);
+    const selectedBoardState = getActiveIssueActionBoardState(state);
+    if (selectedBoardState === undefined) {
+      state = { ...state, status: "No triage issue is selected." };
+      render();
+      return;
+    }
+
     const labelVocabulary = state.labelVocabulary;
     state = {
       ...state,
@@ -474,7 +484,7 @@ export async function runWatchtowerCli(): Promise<void> {
     state = syncShellWithBoardState(
       state,
       await markSelectedIssueReadyToRun(
-        selectedBoardState ?? boardState,
+        selectedBoardState,
         labelVocabulary,
         createShellIssueMutationGateway(),
         loadIssueBoardForMutation,
@@ -494,8 +504,13 @@ export async function runWatchtowerCli(): Promise<void> {
       return;
     }
 
-    const boardState = state.boardState;
-    const selectedBoardState = getActiveIssueBoardState(state);
+    const selectedBoardState = getActiveIssueActionBoardState(state);
+    if (selectedBoardState === undefined) {
+      state = { ...state, status: "No run issue is selected." };
+      render();
+      return;
+    }
+
     state = {
       ...state,
       moveMenuOpen: false,
@@ -507,7 +522,7 @@ export async function runWatchtowerCli(): Promise<void> {
     state = syncShellWithBoardState(
       state,
       await unmarkSelectedIssueReadyToRun(
-        selectedBoardState ?? boardState,
+        selectedBoardState,
         createShellIssueMutationGateway(),
         loadIssueBoardForMutation,
       ),
