@@ -25,6 +25,8 @@ import * as sandcastle from "@ai-hero/sandcastle";
 import { podman } from "@ai-hero/sandcastle/sandboxes/podman";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -46,6 +48,8 @@ const hooks = {
 const copyToWorktree = ["node_modules"];
 
 const SANDBOX_IMAGE = "sandcastle:watchtower";
+const HOST_CODEX_DIR = join(homedir(), ".codex");
+const HOST_CODEX_AUTH = join(HOST_CODEX_DIR, "auth.json");
 
 const loadEnvFile = (path: string) => {
   if (!existsSync(path)) {
@@ -124,6 +128,12 @@ const requirePreflight = () => {
   requireCommand("git", "Install git and retry.");
   requireCommand("podman", "Install Podman and retry.");
 
+  if (!existsSync(HOST_CODEX_AUTH)) {
+    throw new Error(
+      `${HOST_CODEX_AUTH} is required so Codex can authenticate inside the sandbox. Run codex login on the host first.`,
+    );
+  }
+
   if (!existsSync("node_modules") || !statSync("node_modules").isDirectory()) {
     throw new Error(
       "node_modules is required because Sandcastle copies it into worktrees. Run npm install first.",
@@ -159,6 +169,12 @@ const sandboxProvider = () =>
   podman({
     imageName: SANDBOX_IMAGE,
     env: { GH_TOKEN: process.env.GH_TOKEN! },
+    mounts: [
+      {
+        hostPath: HOST_CODEX_DIR,
+        sandboxPath: "~/.codex",
+      },
+    ],
   });
 
 // ---------------------------------------------------------------------------
