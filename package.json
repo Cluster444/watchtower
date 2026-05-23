@@ -13,7 +13,8 @@
   "scripts": {
     "dev": "bun run index.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "ralph": "bunx tsx .sandcastle/main.mts"
   },
   "name": "watchtower",
   "module": "index.ts",
