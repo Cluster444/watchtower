@@ -46,6 +46,7 @@ Make a git commit. The commit message must:
 3. Key decisions made
 4. Files changed
 5. Blockers or notes for next iteration
+6. End with a GitHub auto-close footer on its own line: `Closes #{{TASK_ID}}`
 
 Keep it concise.
 
@@ -53,7 +54,7 @@ Keep it concise.
 
 If the task is not complete, leave a comment on the issue with what was done.
 
-Do not close the issue - this will be done later.
+Do not close the issue with `gh issue close`. The `Closes #{{TASK_ID}}` commit footer will close it when the commit reaches GitHub's default branch.
 
 Once complete, output <promise>COMPLETE</promise>.
 
