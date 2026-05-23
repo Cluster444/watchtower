@@ -1,6 +1,8 @@
-import { Box, Text, createCliRenderer } from "@opentui/core";
+import { createCliRenderer } from "@opentui/core";
+import { createRoot } from "@opentui/react";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { createElement } from "react";
 import { mapInputToAction, type WatchtowerAction } from "../input/actions";
 import {
   createBoardState,
@@ -17,15 +19,15 @@ import {
 } from "../issues/boardState";
 import { GhIssueGateway } from "../issues/githubGateway";
 import { openIssueInBrowser } from "../issues/openIssue";
-import { classifyIssueBoard, renderIssueBoardLines, type IssueBoard } from "../issues/issueBoard";
+import { classifyIssueBoard, type IssueBoard } from "../issues/issueBoard";
 import {
   requiresTriageMoveConfirmation,
   type IssueMutationGateway,
   type TriageMoveDestination,
 } from "../issues/triageActions";
 import { parseLabelVocabulary, type LabelVocabulary } from "../setup/labelVocabulary";
-import { runSetupPreflight, type SetupFailure, type SetupPreflightResult } from "../setup/preflight";
-import { formatPreflightFailureLines } from "../setup/preflightScreen";
+import { runSetupPreflight, type SetupPreflightResult } from "../setup/preflight";
+import { WatchtowerShell } from "./shellView";
 
 export type WatchtowerScreen = "triage" | "run";
 
@@ -41,27 +43,11 @@ export type WatchtowerShellState = {
   status: string;
 };
 
-const WATCHTOWER_SHELL_ID = "watchtower-shell";
-
-const SCREEN_LABELS: Record<WatchtowerScreen, string> = {
-  triage: "Triage",
-  run: "Run",
-};
-
 const ACTIONS_ALLOWED_DURING_FAILED_PREFLIGHT: ReadonlySet<WatchtowerAction> = new Set([
   "exit",
   "refresh",
   "retryPreflight",
 ]);
-const MOVE_MENU_OPTIONS = [
-  "0 Inbox",
-  "1 needs-triage",
-  "2 needs-info",
-  "3 ready-for-agent",
-  "4 ready-for-human",
-  "5 Close as wontfix",
-  "Esc cancel",
-].join(" | ");
 const CONFIRMATION_REQUIRED_STATUS_FRAGMENT = "requires confirmation";
 const RENDERER_SHUTDOWN_SIGNALS = ["SIGINT", "SIGTERM"] as const;
 
@@ -186,69 +172,12 @@ function confirmPendingAction(state: WatchtowerShellState): WatchtowerShellState
   };
 }
 
-export function createWatchtowerShellView(state: WatchtowerShellState) {
-  if (!state.preflight.ok) {
-    return createPreflightFailureView(state.preflight.failures);
-  }
-
-  return Box(
-    {
-      borderStyle: "rounded",
-      flexDirection: "column",
-      gap: 1,
-      height: "100%",
-      id: WATCHTOWER_SHELL_ID,
-      padding: 1,
-      width: "100%",
-    },
-    Text({ content: "Watchtower", fg: "#8BD5CA" }),
-    Text({ content: `Screen: ${SCREEN_LABELS[state.screen]}` }),
-    Text({ content: state.status, fg: "#F9E2AF" }),
-    ...renderBoardText(state),
-    ...renderActionPromptText(state),
-    Text({ content: "1/t triage | 2/r run | / search | Ctrl+R refresh | q exit" }),
-  );
-}
-
-function createPreflightFailureView(failures: SetupFailure[]) {
-  const lines = formatPreflightFailureLines(failures);
-  return Box(
-    {
-      borderStyle: "rounded",
-      flexDirection: "column",
-      gap: 1,
-      height: "100%",
-      id: WATCHTOWER_SHELL_ID,
-      padding: 1,
-      width: "100%",
-    },
-    ...lines.map((line, index) =>
-      Text({
-        content: line,
-        fg: getPreflightLineColor(index, lines.length),
-      }),
-    ),
-  );
-}
-
 function isBlockedByPreflight(state: WatchtowerShellState, action: WatchtowerAction): boolean {
   return !state.preflight.ok && !ACTIONS_ALLOWED_DURING_FAILED_PREFLIGHT.has(action);
 }
 
 function isPreflightRetryAction(action: WatchtowerAction): boolean {
   return action === "retryPreflight" || action === "refresh";
-}
-
-function getPreflightLineColor(index: number, lineCount: number): string | undefined {
-  if (index === 0) {
-    return "#F38BA8";
-  }
-
-  if (index === lineCount - 1) {
-    return "#F9E2AF";
-  }
-
-  return undefined;
 }
 
 export async function runWatchtowerCli(): Promise<void> {
@@ -263,20 +192,15 @@ export async function runWatchtowerCli(): Promise<void> {
     screen: "triage",
     status: "CLI shell ready",
   };
-  let hasRenderedShell = false;
   let isRendererDestroyed = false;
+  const root = createRoot(renderer);
 
   const render = () => {
     if (isRendererDestroyed) {
       return;
     }
 
-    if (hasRenderedShell) {
-      renderer.root.remove(WATCHTOWER_SHELL_ID);
-    }
-
-    renderer.root.add(createWatchtowerShellView(state));
-    hasRenderedShell = true;
+    root.render(createElement(WatchtowerShell, { state }));
   };
 
   const destroyRenderer = () => {
@@ -285,6 +209,7 @@ export async function runWatchtowerCli(): Promise<void> {
     }
 
     isRendererDestroyed = true;
+    root.unmount();
     renderer.destroy();
   };
 
@@ -562,53 +487,6 @@ export async function loadIssueBoard(cwd: string): Promise<{ board: IssueBoard; 
   return { board: classifyIssueBoard(issueSets, vocabulary), vocabulary };
 }
 
-function renderBoardText(state: WatchtowerShellState) {
-  const board = state.boardState?.visibleBoard ?? state.board;
-  if (board === undefined) {
-    return [Text({ content: "Issue board has not loaded yet." })];
-  }
-
-  return [
-    Text({
-      content: `Search: ${state.boardState?.searchQuery ?? ""}`,
-      fg: state.boardState?.searchFocused ? "#A6E3A1" : "#A6ADC8",
-    }),
-    Text({
-      content: `Selected: ${renderSelectionSummary(state.boardState)}`,
-      fg: "#A6ADC8",
-    }),
-    ...renderIssueBoardLines(board, state.screen).map((line) =>
-      Text({
-        content: line,
-        fg: line.startsWith("#") ? "#CDD6F4" : "#A6ADC8",
-      }),
-    ),
-  ];
-}
-
-function renderActionPromptText(state: WatchtowerShellState) {
-  if (!state.moveMenuOpen) {
-    if (state.pendingReadyToRunPromotion === true) {
-      return [
-        Text({ content: "Mark ready to run requires confirmation." }),
-        Text({ content: "Enter confirm | Esc cancel" }),
-      ];
-    }
-    if (state.pendingDestructiveMove !== undefined) {
-      return [
-        Text({ content: `${formatMoveMenuDestination(state.pendingDestructiveMove)} requires confirmation.` }),
-        Text({ content: "Enter confirm | Esc cancel" }),
-      ];
-    }
-    return [];
-  }
-
-  return [
-    Text({ content: "Move selected issue:" }),
-    Text({ content: MOVE_MENU_OPTIONS }),
-  ];
-}
-
 function formatMoveMenuDestination(destination: TriageMoveDestination): string {
   switch (destination) {
     case "wontfix":
@@ -664,14 +542,6 @@ function getSelectedIssueUrlFromShell(state: WatchtowerShellState): string | und
   }
 
   return getSelectedIssueUrl(state.boardState);
-}
-
-function renderSelectionSummary(boardState: BoardState | undefined): string {
-  if (boardState === undefined) {
-    return "none";
-  }
-
-  return `${boardState.selection.laneKey} card ${boardState.selection.cardIndex + 1}`;
 }
 
 async function getRepositoryUrl(cwd: string): Promise<string | undefined> {
