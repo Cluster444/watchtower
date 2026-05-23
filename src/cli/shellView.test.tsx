@@ -21,6 +21,28 @@ describe("WatchtowerShell", () => {
     expect(commandBarText).not.toContain("m move");
     expect(commandBarText).not.toContain("p mark ready");
   });
+
+  test("renders empty-column commands without selected-issue actions", () => {
+    const state: WatchtowerShellState = {
+      boardState: {
+        cursor: { columnIndex: 1, slotIndexByColumn: { 0: 0, 1: undefined } },
+        selection: { screen: "triage", laneKey: "needs-triage", cardIndex: 0 },
+      } as unknown as WatchtowerShellState["boardState"],
+      moveMenuOpen: false,
+      preflight: { ok: true },
+      screen: "triage",
+      status: "Selection moved",
+    };
+
+    const shell = WatchtowerShell({ state }) as { props: { children: unknown } };
+    const children = shell.props.children as Array<{ type: { name: string }; props: { children?: unknown } }>;
+    const commandBarText = flattenText(renderElement(children[2]));
+
+    expect(commandBarText).toContain("h/l column");
+    expect(commandBarText).not.toContain("m move");
+    expect(commandBarText).not.toContain("p mark ready");
+    expect(commandBarText).not.toContain("o open");
+  });
 });
 
 function flattenText(node: unknown): string {

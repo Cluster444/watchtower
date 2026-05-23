@@ -133,6 +133,10 @@ function renderPrimaryCommandLine(state: WatchtowerShellState): string {
     return "1/t triage | 2/r run | / search | Ctrl+R refresh | q exit";
   }
 
+  if (!hasSelectedIssue(state.boardState)) {
+    return "h/l column | / search | Ctrl+R refresh | q exit";
+  }
+
   if (state.screen === "run") {
     return "j/k slot | h/l column | u unmark ready | o open | / search | Ctrl+R refresh | q exit";
   }
@@ -172,6 +176,10 @@ function renderSelectionSummary(boardState: BoardState | undefined): string {
   }
 
   return `${boardState.selection.laneKey} card ${selectedSlotIndex + 1}`;
+}
+
+function hasSelectedIssue(boardState: BoardState): boolean {
+  return boardState.cursor.slotIndexByColumn[boardState.cursor.columnIndex] !== undefined;
 }
 
 function getPreflightLineColor(index: number, lineCount: number): string | undefined {

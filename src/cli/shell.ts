@@ -6,6 +6,7 @@ import { createElement } from "react";
 import { mapInputToAction, type WatchtowerAction } from "../input/actions";
 import {
   createBoardState,
+  getSelectedCard,
   getSelectedIssueUrl,
   markSelectedIssueReadyToRun,
   moveSelectedIssueToTriageDestination,
@@ -83,7 +84,7 @@ export function reduceShellState(
     case "focusSearch":
       return applyBoardAction(state, { type: "focusSearch" }, { status: "Search focused" });
     case "openMoveMenu":
-      return state.boardState === undefined
+      return state.boardState === undefined || getSelectedCard(state.boardState) === undefined
         ? { ...state, status: "No issue is selected." }
         : { ...state, moveMenuOpen: true, status: "Move menu opened" };
     case "markReadyToRun":

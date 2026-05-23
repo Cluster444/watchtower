@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { reduceShellState, type WatchtowerShellState } from "./shell";
+import { createBoardState, reduceBoardState } from "../issues/boardState";
+import type { IssueBoard } from "../issues/issueBoard";
 
 describe("reduceShellState", () => {
   test("switches screens with status updates", () => {
@@ -83,8 +85,9 @@ describe("reduceShellState", () => {
   });
 
   test("opens and cancels the move menu when a board is loaded", () => {
+    const boardState = createBoardState(board());
     const state: WatchtowerShellState = {
-      boardState: {} as WatchtowerShellState["boardState"],
+      boardState,
       moveMenuOpen: false,
       preflight: { ok: true },
       screen: "triage",
@@ -100,6 +103,22 @@ describe("reduceShellState", () => {
       ...state,
       moveMenuOpen: false,
       status: "Canceled",
+    });
+  });
+
+  test("does not open the move menu when an empty column is focused", () => {
+    const boardState = reduceBoardState(createBoardState(board()), { type: "moveSelectionRight" });
+    const state: WatchtowerShellState = {
+      boardState,
+      moveMenuOpen: false,
+      preflight: { ok: true },
+      screen: "triage",
+      status: "Selection moved",
+    };
+
+    expect(reduceShellState(state, "openMoveMenu")).toEqual({
+      ...state,
+      status: "No issue is selected.",
     });
   });
 
@@ -147,3 +166,36 @@ describe("reduceShellState", () => {
     });
   });
 });
+
+function board(): IssueBoard {
+  return {
+    triage: {
+      inbox: lane("Inbox", [card(101)]),
+      "needs-triage": lane("Needs triage", []),
+      "needs-info": lane("Needs info", []),
+      "ready-for-human": lane("Ready for human", []),
+      "ready-for-agent": lane("Ready for agent", []),
+      wontfix: lane("Wontfix", []),
+      conflicted: lane("Conflicted", []),
+    },
+    run: {
+      readyToRun: lane("Ready to run", [card(202)]),
+      closed: lane("Closed", []),
+    },
+  };
+}
+
+function lane(title: string, cards: IssueBoard["triage"]["inbox"]["cards"]) {
+  return { title, cards, emptyState: `No ${title.toLowerCase()} issues.` };
+}
+
+function card(number: number) {
+  return {
+    bodyPreview: "plain preview",
+    number,
+    title: `Issue ${number}`,
+    updatedAge: "1h ago",
+    updatedAt: "2026-05-22T12:00:00Z",
+    workflowLabels: [],
+  };
+}
