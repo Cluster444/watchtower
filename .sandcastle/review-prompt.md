@@ -1,6 +1,6 @@
 # TASK
 
-Review the code changes on branch `{{BRANCH}}` and improve code clarity, consistency, and maintainability while preserving exact functionality.
+Review the work on the current branch, which should be `{{BRANCH}}`, against the issue it implemented. Focus on whether the branch correctly satisfies the issue goals without introducing regressions. This is a review pass, not a general cleanup pass.
 
 # CONTEXT
 
@@ -14,42 +14,34 @@ Review the code changes on branch `{{BRANCH}}` and improve code clarity, consist
 
 # REVIEW PROCESS
 
-1. **Understand the change**: Read the diff and commits above to understand the intent.
+1. **Confirm branch/base**: Verify the current branch is `{{BRANCH}}`. Use `{{SOURCE_BRANCH}}` as the review base; do not assume the default branch is named `main` or `master`.
 
-2. **Analyze for improvements**: Look for opportunities to:
-   - Reduce unnecessary complexity and nesting
-   - Eliminate redundant code and abstractions
-   - Improve readability through clear variable and function names
-   - Consolidate related logic
-   - Remove unnecessary comments that describe obvious code
-   - Avoid nested ternary operators - prefer switch statements or if/else chains
-   - Choose clarity over brevity - explicit code is often better than overly compact code
+2. **Understand the issue**: Read the issue and any linked parent issue or PRD. Review the branch against that requested outcome.
 
-3. **Check correctness**:
-   - Does the implementation match the intent? Are edge cases handled?
-   - Are new/changed behaviours covered by tests?
-   - Are there unsafe casts, `any` types, or unchecked assumptions?
-   - Does the change introduce injection vulnerabilities, credential leaks, or other security issues?
+3. **Review correctness first**:
+   - Does the implementation match the issue goals and acceptance criteria?
+   - Are important edge cases handled?
+   - Are new or changed behaviours covered by meaningful tests?
+   - Does the change preserve existing behavior outside the issue scope?
+   - Are GitHub/API mutations safe and intentionally ordered?
+   - Are there unsafe casts, `any` types, unchecked assumptions, credential leaks, or injection risks?
 
-4. **Maintain balance**: Avoid over-simplification that could:
-   - Reduce code clarity or maintainability
-   - Create overly clever solutions that are hard to understand
-   - Combine too many concerns into single functions or components
-   - Remove helpful abstractions that improve code organization
-   - Make the code harder to debug or extend
+4. **Only edit for real review findings**: Make code changes only when you find a concrete correctness issue, missing test, regression risk, or maintainability problem that directly affects the issue work. Do not make cosmetic cleanup, broad refactors, naming-only changes, or general codebase improvements. Those will happen later with human-in-the-loop cleanup.
 
-5. **Apply project standards**: Follow the coding standards defined in @.sandcastle/CODING_STANDARDS.md
+5. **Report findings explicitly**: If you find issues, list them by severity with file/line references before editing. If there are no material findings, say so and do not commit a cleanup-only change.
 
-6. **Preserve functionality**: Never change what the code does - only how it does it. All original features, outputs, and behaviors must remain intact.
+6. **Apply project standards**: Follow the coding standards defined in @.sandcastle/CODING_STANDARDS.md when you must change code.
+
+7. **Verify**: If you make changes, run tests and type checking before committing.
 
 # EXECUTION
 
-If you find improvements to make:
+If you find material review findings that require changes:
 
 1. Make the changes directly on this branch
 2. Run tests and type checking to ensure nothing is broken
-3. Commit describing the refinements
+3. Commit with a message describing the review fix
 
-If the code is already clean and well-structured, do nothing.
+If the implementation satisfies the issue and no material changes are needed, do not edit or commit anything. Output a brief review result and `<promise>COMPLETE</promise>`.
 
 Once complete, output <promise>COMPLETE</promise>.

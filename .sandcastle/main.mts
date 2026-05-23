@@ -22,7 +22,9 @@
 //   "scripts": { "sandcastle": "npx tsx .sandcastle/main.mts" }
 
 import * as sandcastle from "@ai-hero/sandcastle";
-import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import { podman } from "@ai-hero/sandcastle/sandboxes/podman";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, statSync } from "node:fs";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -43,6 +45,122 @@ const hooks = {
 // platform-specific binaries and any packages added since the last copy.
 const copyToWorktree = ["node_modules"];
 
+const SANDBOX_IMAGE = "sandcastle:watchtower";
+
+const loadEnvFile = (path: string) => {
+  if (!existsSync(path)) {
+    return;
+  }
+
+  for (const line of readFileSync(path, "utf8").split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const separator = trimmed.indexOf("=");
+    if (separator === -1) {
+      continue;
+    }
+
+    const key = trimmed.slice(0, separator).trim();
+    const rawValue = trimmed.slice(separator + 1).trim();
+    const value = rawValue.replace(/^(['"])(.*)\1$/, "$2");
+
+    process.env[key] ??= value;
+  }
+};
+
+const git = (args: string[]) =>
+  execFileSync("git", args, { encoding: "utf8" }).trim();
+
+const run = (command: string, args: string[]) =>
+  execFileSync(command, args, { encoding: "utf8", stdio: "pipe" }).trim();
+
+const requireCommand = (command: string, installHint: string) => {
+  try {
+    run(command, ["--version"]);
+  } catch {
+    throw new Error(`${command} is required. ${installHint}`);
+  }
+};
+
+const requireEnv = (name: string) => {
+  if (!process.env[name]) {
+    throw new Error(
+      `${name} is required. Set it in the environment or .sandcastle/.env before running Sandcastle.`,
+    );
+  }
+};
+
+const requireSandboxCommand = (command: string) => {
+  try {
+    run("podman", [
+      "run",
+      "--rm",
+      "--entrypoint",
+      command,
+      SANDBOX_IMAGE,
+      "--version",
+    ]);
+  } catch {
+    throw new Error(
+      `Sandbox image ${SANDBOX_IMAGE} must provide ${command}. Rebuild it with sandcastle podman build-image.`,
+    );
+  }
+};
+
+const requireCleanWorktree = () => {
+  const status = git(["status", "--porcelain", "--untracked-files=all"]);
+  if (status.length > 0) {
+    throw new Error(
+      `Refusing to start Sandcastle run from a dirty worktree. Commit or stash these changes first:\n${status}`,
+    );
+  }
+};
+
+const requirePreflight = () => {
+  requireEnv("GH_TOKEN");
+  requireCommand("git", "Install git and retry.");
+  requireCommand("podman", "Install Podman and retry.");
+
+  if (!existsSync("node_modules") || !statSync("node_modules").isDirectory()) {
+    throw new Error(
+      "node_modules is required because Sandcastle copies it into worktrees. Run npm install first.",
+    );
+  }
+
+  try {
+    run("podman", ["image", "inspect", SANDBOX_IMAGE]);
+  } catch {
+    throw new Error(
+      `Sandbox image ${SANDBOX_IMAGE} is missing. Build it with sandcastle podman build-image before running Sandcastle.`,
+    );
+  }
+
+  requireSandboxCommand("bun");
+  requireSandboxCommand("rg");
+  requireSandboxCommand("gh");
+};
+
+loadEnvFile(".sandcastle/.env");
+requirePreflight();
+requireCleanWorktree();
+
+// Review agents compare their issue branch against the branch that started the
+// run. Do not assume the repository's default branch is named main or master.
+const sourceBranch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
+
+if (sourceBranch === "HEAD") {
+  throw new Error("Refusing to start Sandcastle run from a detached HEAD.");
+}
+
+const sandboxProvider = () =>
+  podman({
+    imageName: SANDBOX_IMAGE,
+    env: { GH_TOKEN: process.env.GH_TOKEN! },
+  });
+
 // ---------------------------------------------------------------------------
 // Main loop
 // ---------------------------------------------------------------------------
@@ -61,7 +179,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   // -------------------------------------------------------------------------
   const plan = await sandcastle.run({
     hooks,
-    sandbox: docker(),
+    sandbox: sandboxProvider(),
     name: "planner",
     // One iteration is enough: the planner just needs to read and reason,
     // not write code.
@@ -111,7 +229,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     issues.map(async (issue) => {
       const sandbox = await sandcastle.createSandbox({
         branch: issue.branch,
-        sandbox: docker(),
+        sandbox: sandboxProvider(),
         hooks,
         copyToWorktree,
       });
@@ -138,6 +256,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
             agent: sandcastle.codex("gpt-5.5", { effort: "xhigh" }),
             promptFile: "./.sandcastle/review-prompt.md",
             promptArgs: {
+              SOURCE_BRANCH: sourceBranch,
               BRANCH: issue.branch,
             },
           });
@@ -203,7 +322,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   // -------------------------------------------------------------------------
   await sandcastle.run({
     hooks,
-    sandbox: docker(),
+    sandbox: sandboxProvider(),
     name: "merger",
     maxIterations: 1,
     agent: sandcastle.codex("gpt-5.5", { effort: "xhigh" }),
@@ -213,7 +332,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
       BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),
       // A markdown list of issue IDs and titles, one per line.
       ISSUES: completedIssues
-        .map((i) => `- ${i.id}: ${i.title}`)
+        .map((i) => `- #${i.id}: ${i.title}`)
         .join("\n"),
     },
   });

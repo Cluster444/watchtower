@@ -15,9 +15,11 @@ After all branches are merged, make a single commit summarizing the merge.
 
 # CLOSE ISSUES
 
-For each branch that was merged, close its issue using the following command:
+Do not close issues with `gh issue close` during the merge. Instead, include GitHub auto-close keywords in the final merge summary commit message so the issues close when the merge commit reaches the default branch on GitHub.
 
-`gh issue close <ID> --comment "Completed by Sandcastle"`
+The final merge summary commit body must include one line per completed issue in this exact form:
+
+`Closes #<ID>`
 
 Here are all the issues:
 
