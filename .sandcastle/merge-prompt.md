@@ -13,13 +13,19 @@ For each branch:
 
 After all branches are merged, make a single commit summarizing the merge.
 
-# CLOSE ISSUES
+# MARK ISSUES COMPLETE
 
 Do not close issues with `gh issue close` during the merge. Instead, include GitHub auto-close keywords in the final merge summary commit message so the issues close when the merge commit reaches the default branch on GitHub.
 
 The final merge summary commit body must include one line per completed issue in this exact form:
 
 `Closes #<ID>`
+
+After the merge has succeeded, `npm run typecheck` and `npm run test` pass, and the final merge summary commit has been created, remove the `Sandcastle` label from each completed issue:
+
+`gh issue edit <ID> --remove-label Sandcastle`
+
+This marks the issue as no longer eligible for the local Ralph planner even before the `Closes #<ID>` commit has been pushed to GitHub's default branch.
 
 Here are all the issues:
 
