@@ -42,7 +42,7 @@ describe("WatchtowerShell", () => {
     const children = shell.props.children as Array<{ type: { name: string }; props: { children?: unknown } }>;
     const commandBarText = flattenText(renderElement(children[2]));
 
-    expect(commandBarText).toContain("h/l column");
+    expect(commandBarText).toContain("h/l or arrows column");
     expect(commandBarText).not.toContain("m move");
     expect(commandBarText).not.toContain("p mark ready");
     expect(commandBarText).not.toContain("o open");

@@ -105,20 +105,29 @@ export function reduceShellState(
     case "confirmDestructiveAction":
       return confirmPendingAction(state);
     case "moveSelectionUp":
-      if (state.searchFocused) return state;
+      if (isBoardNavigationBlocked(state)) return state;
       return applyBoardAction(state, { type: "moveSelectionUp" }, { status: "Selection movement placeholder" });
     case "moveSelectionDown":
-      if (state.searchFocused) return state;
+      if (isBoardNavigationBlocked(state)) return state;
       return applyBoardAction(state, { type: "moveSelectionDown" }, { status: "Selection movement placeholder" });
     case "moveSelectionLeft":
-      if (state.searchFocused) return state;
+      if (isBoardNavigationBlocked(state)) return state;
       return applyBoardAction(state, { type: "moveSelectionLeft" }, { status: "Selection movement placeholder" });
     case "moveSelectionRight":
-      if (state.searchFocused) return state;
+      if (isBoardNavigationBlocked(state)) return state;
       return applyBoardAction(state, { type: "moveSelectionRight" }, { status: "Selection movement placeholder" });
     case "exit":
       return state;
   }
+}
+
+function isBoardNavigationBlocked(state: WatchtowerShellState): boolean {
+  return (
+    state.searchFocused ||
+    state.moveMenuOpen ||
+    state.pendingDestructiveMove !== undefined ||
+    state.pendingReadyToRunPromotion === true
+  );
 }
 
 function applyBoardAction(

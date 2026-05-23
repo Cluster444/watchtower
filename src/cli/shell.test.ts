@@ -160,6 +160,26 @@ describe("reduceShellState", () => {
     expect(reduceShellState(state, "moveSelectionRight")).toBe(state);
   });
 
+  test("does not move the board cursor while menus or confirmations are pending", () => {
+    const boardState = createBoardState(board());
+    const state: WatchtowerShellState = {
+      boardState,
+      moveMenuOpen: true,
+      searchFocused: false,
+      searchQuery: "",
+      preflight: { ok: true },
+      screen: "triage",
+      status: "Move menu opened",
+    };
+
+    const pendingMoveState = { ...state, moveMenuOpen: false, pendingDestructiveMove: "wontfix" as const };
+    const pendingReadyState = { ...state, moveMenuOpen: false, pendingReadyToRunPromotion: true };
+
+    expect(reduceShellState(state, "moveSelectionDown")).toBe(state);
+    expect(reduceShellState(pendingMoveState, "moveSelectionRight")).toBe(pendingMoveState);
+    expect(reduceShellState(pendingReadyState, "moveSelectionDown")).toBe(pendingReadyState);
+  });
+
   test("routes printable command keys into search text while search is focused", () => {
     const boardState = createBoardState(board());
     const state: WatchtowerShellState = {

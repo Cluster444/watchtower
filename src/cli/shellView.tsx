@@ -2,27 +2,11 @@ import { formatPreflightFailureLines } from "../setup/preflightScreen";
 import { Board } from "../components/kanban/Board";
 import { issueBoardToKanbanColumns } from "../components/issues/issueKanban";
 import { filterIssueKanban } from "../components/issues/issueKanbanFilter";
-import type { BoardState } from "../issues/boardState";
-import type { TriageMoveDestination } from "../issues/triageActions";
-import type { WatchtowerShellState, WatchtowerScreen } from "./shell";
+import { createShellBarModel } from "./shellBars";
+import type { WatchtowerShellState } from "./shell";
 import type { SetupFailure } from "../setup/preflight";
 
 const WATCHTOWER_SHELL_ID = "watchtower-shell";
-
-const SCREEN_LABELS: Record<WatchtowerScreen, string> = {
-  triage: "Triage",
-  run: "Run",
-};
-
-const MOVE_MENU_OPTIONS = [
-  "0 Inbox",
-  "1 needs-triage",
-  "2 needs-info",
-  "3 ready-for-agent",
-  "4 ready-for-human",
-  "5 Close as wontfix",
-  "Esc cancel",
-].join(" | ");
 
 export function WatchtowerShell({ state }: { state: WatchtowerShellState }) {
   if (!state.preflight.ok) {
@@ -48,10 +32,15 @@ export function WatchtowerShell({ state }: { state: WatchtowerShellState }) {
 }
 
 function Header({ state }: { state: WatchtowerShellState }) {
+  const model = createShellBarModel(state);
+
   return (
     <box flexDirection="column" id="watchtower-header">
-      <text fg="#8BD5CA">Watchtower</text>
-      <text>Screen: {SCREEN_LABELS[state.screen]}</text>
+      {model.headerLines.map((line, index) => (
+        <text fg={index === 0 ? "#8BD5CA" : undefined} key={line}>
+          {line}
+        </text>
+      ))}
     </box>
   );
 }
@@ -78,22 +67,27 @@ function BoardArea({ state }: { state: WatchtowerShellState }) {
 }
 
 function CommandBar({ state }: { state: WatchtowerShellState }) {
+  const model = createShellBarModel(state);
+
   return (
     <box flexDirection="column" id="watchtower-command-bar">
-      <text>{renderPrimaryCommandLine(state)}</text>
-      {renderPromptLine(state)}
+      {model.commandLines.map((line) => (
+        <text key={line}>{line}</text>
+      ))}
     </box>
   );
 }
 
 function StatusBar({ state }: { state: WatchtowerShellState }) {
+  const model = createShellBarModel(state);
+
   return (
     <box flexDirection="column" id="watchtower-status-bar">
-      <text fg="#F9E2AF">{state.status}</text>
-      <text fg="#A6ADC8">Selected: {renderSelectionSummary(state.boardState)}</text>
-      <text fg={state.searchFocused ? "#A6E3A1" : "#A6ADC8"}>
-        Search: {state.searchQuery}
-      </text>
+      {model.statusLines.map((line, index) => (
+        <text fg={index === 2 ? "#F9E2AF" : state.searchFocused && index === 3 ? "#A6E3A1" : "#A6ADC8"} key={line}>
+          {line}
+        </text>
+      ))}
     </box>
   );
 }
@@ -119,76 +113,6 @@ function PreflightFailureView({ state }: { state: WatchtowerShellState }) {
       ))}
     </box>
   );
-}
-
-function renderPrimaryCommandLine(state: WatchtowerShellState): string {
-  if (state.moveMenuOpen) {
-    return "Move selected issue:";
-  }
-
-  if (state.pendingReadyToRunPromotion === true) {
-    return "Mark ready to run requires confirmation.";
-  }
-
-  if (state.pendingDestructiveMove !== undefined) {
-    return `${formatMoveMenuDestination(state.pendingDestructiveMove)} requires confirmation.`;
-  }
-
-  if (state.searchFocused) {
-    return `Search: ${state.searchQuery} | type to filter | Backspace clear | Esc cancel`;
-  }
-
-  if (state.boardState === undefined) {
-    return "1/t triage | 2/r run | / search | Ctrl+R refresh | q exit";
-  }
-
-  if (!hasSelectedIssue(state.boardState)) {
-    return "h/l column | / search | Ctrl+R refresh | q exit";
-  }
-
-  if (state.screen === "run") {
-    return "j/k slot | h/l column | u unmark ready | o open | / search | Ctrl+R refresh | q exit";
-  }
-
-  return "j/k slot | h/l column | m move | p mark ready | o open | / search | Ctrl+R refresh | q exit";
-}
-
-function renderPromptLine(state: WatchtowerShellState) {
-  if (state.moveMenuOpen) {
-    return <text>{MOVE_MENU_OPTIONS}</text>;
-  }
-
-  if (state.pendingReadyToRunPromotion === true || state.pendingDestructiveMove !== undefined) {
-    return <text>Enter confirm | Esc cancel</text>;
-  }
-
-  return undefined;
-}
-
-function formatMoveMenuDestination(destination: TriageMoveDestination): string {
-  switch (destination) {
-    case "wontfix":
-      return "Close as wontfix";
-    default:
-      return destination;
-  }
-}
-
-function renderSelectionSummary(boardState: BoardState | undefined): string {
-  if (boardState === undefined) {
-    return "none";
-  }
-
-  const selectedSlotIndex = boardState.cursor.slotIndexByColumn[boardState.cursor.columnIndex];
-  if (selectedSlotIndex === undefined) {
-    return `${boardState.selection.laneKey} empty`;
-  }
-
-  return `${boardState.selection.laneKey} card ${selectedSlotIndex + 1}`;
-}
-
-function hasSelectedIssue(boardState: BoardState): boolean {
-  return boardState.cursor.slotIndexByColumn[boardState.cursor.columnIndex] !== undefined;
 }
 
 function getPreflightLineColor(index: number, lineCount: number): string | undefined {
